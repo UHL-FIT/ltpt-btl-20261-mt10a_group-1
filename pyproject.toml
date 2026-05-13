@@ -1,0 +1,24 @@
+[project]
+name = "patient-management"
+version = "1.0.0"
+description = "Hệ thống Quản lý Hồ sơ Bệnh nhân - Patient Management System"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.2.0",
+    "numpy>=1.26.0",
+    "matplotlib>=3.8.0",
+    "openpyxl>=3.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "faker>=25.0.0",
+    "pyinstaller>=6.0.0",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "faker>=25.0.0",
+    "pyinstaller>=6.0.0",
+]

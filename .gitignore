@@ -1,0 +1,21 @@
+__pycache__/
+*.pyc
+*.pyo
+*.log
+*.spec
+build/
+dist/
+.venv/
+.idea/
+.vscode/
+
+# Database
+data/patients.db
+data/*.db
+
+# UV lock (optional: bỏ dòng này nếu muốn commit uv.lock)
+# uv.lock
+
+# OS
+Thumbs.db
+.DS_Store
