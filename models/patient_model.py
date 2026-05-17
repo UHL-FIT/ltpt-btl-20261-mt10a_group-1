@@ -13,6 +13,7 @@ class PatientModel:
         # Luôn lưu DB cùng thư mục với file model này
         base_dir = os.path.dirname(os.path.abspath(__file__))
         self.db_path = os.path.join(base_dir, "..", "patients_data.db")
+        self.db_name = self.db_path            
         self._init_database()
 
     # ------------------------------------------------------------------
@@ -38,15 +39,14 @@ class PatientModel:
     # ------------------------------------------------------------------
     # CRUD
     # ------------------------------------------------------------------
-    def add_patient(self, data: dict) -> None:
+    def add_patient(self, data: tuple) -> None:
         """Thêm một bệnh nhân mới. data là dict chứa các trường."""
         with sqlite3.connect(self.db_path) as conn:
             conn.execute('''
                 INSERT INTO patients
-                    (name, age, gender, phone, receive_time, primary_disease, secondary_disease, history)
-                VALUES
-                    (:name, :age, :gender, :phone, :receive_time,
-                     :primary_disease, :secondary_disease, :history)
+                    (name, age, gender, phone, receive_time,
+                     primary_disease, secondary_disease, history)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ''', data)
             conn.commit()
 
@@ -55,12 +55,11 @@ class PatientModel:
             conn.execute("DELETE FROM patients WHERE id = ?", (patient_id,))
             conn.commit()
 
-    def update_patient(self, patient_id, data):
+    def update_patient(self, patient_id: int, data: tuple) -> None:
         """Hàm dùng để cập nhật thông tin bệnh nhân (Tính năng Sửa)"""
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
+        with sqlite3.connect(self.db_path) as conn:
             # data là tuple: (name, age, gender, phone, receive_time, primary_disease, secondary_disease, history, patient_id)
-            cursor.execute('''
+            conn.execute('''
                 UPDATE patients 
                 SET name=?, age=?, gender=?, phone=?, receive_time=?, 
                     primary_disease=?, secondary_disease=?, history=?
