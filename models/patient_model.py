@@ -5,6 +5,7 @@ Nhiệm vụ: CRUD bệnh nhân + truy vấn thống kê.
 """
 import sqlite3
 import os
+from datetime import datetime, date
 from utils.helpers import remove_accents
 
 
@@ -34,6 +35,16 @@ class PatientModel:
                     history          TEXT
                 )
             ''')
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS follow_up_appointments (
+                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                    patient_id       INTEGER NOT NULL,
+                    appointment_date TEXT NOT NULL,
+                    reason           TEXT,
+                    frequency        TEXT,
+                    FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+                )
+            ''')            
             conn.commit()
 
     # ------------------------------------------------------------------
@@ -52,6 +63,7 @@ class PatientModel:
 
     def delete_patient(self, patient_id: int) -> None:
         with sqlite3.connect(self.db_path) as conn:
+            conn.execute("PRAGMA foreign_keys = ON")            
             conn.execute("DELETE FROM patients WHERE id = ?", (patient_id,))
             conn.commit()
 
@@ -132,4 +144,98 @@ class PatientModel:
             "today": today,
             "gender_data": gender_data,
             "disease_data": disease_data,
+        }
+
+    # ------------------------------------------------------------------
+    # CRUD – Lịch Tái Khám
+    # ------------------------------------------------------------------
+    def add_follow_up(self, patient_id: int, appointment_date: str,
+                      reason: str, frequency: str) -> None:
+        """Thêm lịch tái khám mới."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute('''
+                INSERT INTO follow_up_appointments
+                    (patient_id, appointment_date, reason, frequency)
+                VALUES (?, ?, ?, ?)
+            ''', (patient_id, appointment_date, reason, frequency))
+            conn.commit()
+ 
+    def delete_follow_up(self, follow_up_id: int) -> None:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("DELETE FROM follow_up_appointments WHERE id = ?", (follow_up_id,))
+            conn.commit()
+ 
+    def get_follow_ups(self, search: str = "") -> list[tuple]:
+        """
+        Trả về danh sách lịch tái khám, join với bảng patients.
+        Mỗi row: (fu_id, patient_id, name, phone, appointment_date,
+                  reason, frequency, days_remaining)
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            conn.create_function("REMOVE_ACCENTS", 1, remove_accents)
+            if search.strip():
+                clean = remove_accents(search.strip())
+                rows = conn.execute('''
+                    SELECT f.id, f.patient_id, p.name, p.phone,
+                           f.appointment_date, f.reason, f.frequency
+                    FROM follow_up_appointments f
+                    JOIN patients p ON p.id = f.patient_id
+                    WHERE REMOVE_ACCENTS(p.name) LIKE ?
+                       OR p.phone LIKE ?
+                       OR CAST(f.patient_id AS TEXT) LIKE ?
+                    ORDER BY f.appointment_date ASC
+                ''', (f"%{clean}%", f"%{search.strip()}%",
+                      f"%{search.strip()}%")).fetchall()
+            else:
+                rows = conn.execute('''
+                    SELECT f.id, f.patient_id, p.name, p.phone,
+                           f.appointment_date, f.reason, f.frequency
+                    FROM follow_up_appointments f
+                    JOIN patients p ON p.id = f.patient_id
+                    ORDER BY f.appointment_date ASC
+                ''').fetchall()
+ 
+        today = date.today()
+        result = []
+        for row in rows:
+            try:
+                appt_date = datetime.strptime(row[4], "%Y-%m-%d").date()
+                days_remaining = (appt_date - today).days
+            except (ValueError, TypeError):
+                days_remaining = 0
+            result.append(row + (days_remaining,))
+        return result
+ 
+    def get_patient_name_by_id(self, patient_id: int) -> str | None:
+        """Tra cứu nhanh tên bệnh nhân theo ID."""
+        with sqlite3.connect(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT name FROM patients WHERE id = ?", (patient_id,)
+            ).fetchone()
+        return row[0] if row else None
+ 
+    def get_follow_up_stats(self) -> dict:
+        """Thống kê tóm tắt cho dashboard lịch tái khám."""
+        today_str = date.today().isoformat()
+        with sqlite3.connect(self.db_path) as conn:
+            total = conn.execute(
+                "SELECT COUNT(*) FROM follow_up_appointments"
+            ).fetchone()[0]
+            today_count = conn.execute(
+                "SELECT COUNT(*) FROM follow_up_appointments WHERE appointment_date = ?",
+                (today_str,)
+            ).fetchone()[0]
+            overdue = conn.execute(
+                "SELECT COUNT(*) FROM follow_up_appointments WHERE appointment_date < ?",
+                (today_str,)
+            ).fetchone()[0]
+            upcoming = conn.execute(
+                "SELECT COUNT(*) FROM follow_up_appointments WHERE appointment_date > ?",
+                (today_str,)
+            ).fetchone()[0]
+        return {
+            "total": total,
+            "today": today_count,
+            "overdue": overdue,
+            "upcoming": upcoming,
         }

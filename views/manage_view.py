@@ -163,7 +163,21 @@ class ManageView(ttk.Frame):
         if self.on_edit:
             self.on_edit()
 
-
+    def refresh_list(self, rows: list[tuple]):
+        """Cập nhật danh sách bệnh nhân trên bảng (Treeview)"""
+        # 1. Xóa toàn bộ dữ liệu cũ đang hiển thị trên bảng
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+            
+        # 2. Chèn dữ liệu mới vào bảng
+        for row in rows:
+            # Dữ liệu (row) trả về từ DB có dạng: 
+            # (id, name, age, gender, receive_time, primary_disease, secondary_disease)
+            patient_id = row[0]
+            display_values = row[1:] # Bỏ id ra, chỉ lấy các thông tin còn lại để hiển thị
+            
+            # iid=patient_id giúp lưu id ẩn dưới mỗi dòng để dùng cho chức năng Sửa/Xóa
+            self.tree.insert("", tk.END, iid=patient_id, values=display_values)
 
     def fill_form_for_edit(self, patient_id: int, patient_data: tuple):
         """
@@ -227,30 +241,14 @@ class ManageView(ttk.Frame):
 
     def get_selected_patient_id(self) -> int | None:
         selected = self.tree.selection()
-        return int(selected[0]) if selected else None
+        if not selected:
+            return None
+        # iid được đặt bằng row[0] (patient_id), chuyển về int
+        try:
+            return int(selected[0])
+        except ValueError:
+            return None
 
-    def refresh_list(self, rows: list[tuple]):
-        """Xóa bảng cũ và điền dữ liệu mới từ Controller."""
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-        for row in rows:
-            self.tree.insert("", tk.END, iid=row[0], values=row[1:])
-
-    def clear_form(self):
-        """
-        BUG FIX #2: gộp hai clear_form() thành một.
-        Xóa sạch form và reset trạng thái chỉnh sửa.
-        """
-        self.current_editing_id = None
-        self.left_frame.config(text="Nhập Thông Tin")   # trả lại tiêu đề gốc        
-        
-        for attr in ("entry_name", "entry_age", "entry_phone",
-                     "entry_primary", "entry_secondary"):
-            getattr(self, attr).delete(0, tk.END)
-        self.combo_gender.current(0)
-        self.entry_time.delete(0, tk.END)
-        self.entry_time.insert(0, datetime.now().strftime("%Y-%m-%d %H:%M"))
-        self.text_history.delete("1.0", tk.END)
 
     def show_detail_popup(self, patient: tuple, root: tk.Tk):
         """Mở cửa sổ chi tiết – View tự vẽ, không cần Controller can thiệp."""

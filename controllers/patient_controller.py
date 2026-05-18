@@ -15,19 +15,21 @@ from tkinter import messagebox, filedialog
 from models.patient_model import PatientModel
 from views.manage_view    import ManageView
 from views.stats_view     import StatsView
+from views.follow_up_view    import FollowUpView
 
 
 class PatientController:
     """
-    Nhận cả 2 View vào constructor để có thể điều phối giữa chúng.
+    Nhận cả 3 View vào constructor để có thể điều phối giữa chúng.
     Ví dụ: khi lưu bệnh nhân → cập nhật cả tab thống kê nếu đang mở.
     """
 
     def __init__(self, model: PatientModel, manage_view: ManageView,
-                 stats_view: StatsView, root):
+                 stats_view: StatsView, follow_up_view: FollowUpView, root):
         self.model        = model
         self.manage_view  = manage_view
         self.stats_view   = stats_view
+        self.follow_up_view  = follow_up_view        
         self.root         = root
 
         self._bind_events()
@@ -49,11 +51,18 @@ class PatientController:
         sv = self.stats_view
         sv.on_refresh = self.load_statistics
 
+        fv = self.follow_up_view
+        fv.on_save         = self.save_follow_up
+        fv.on_delete       = self.delete_follow_up
+        fv.on_search       = self.load_follow_ups
+        fv.on_clear_search = self.load_follow_ups
+        fv.on_lookup_id    = self.lookup_patient_name
+
     # Gioi thieu 
     def show_about(self):
         about_text = (
             "Hệ Thống Quản Lý Hồ Sơ Bệnh Nhân\n"
-            "Phiên bản: alpha 0.1\n"
+            "Phiên bản: alpha 0.2\n"
             "Kiến trúc: MVC (Model-View-Controller)\n\n"
             "Phần mềm hỗ trợ bác sĩ lưu trữ, tìm kiếm và thống kê bệnh án nhanh chóng."
         )
@@ -95,6 +104,7 @@ class PatientController:
                     # Ghi đè file DB cũ bằng file mới
                     shutil.copy2(src_path, self.model.db_name)
                     self.load_patients() # Tải lại danh sách
+                    self.load_follow_ups()
                     if self.stats_view.winfo_ismapped():
                         self.load_statistics() # Tải lại thống kê nếu đang mở
                     messagebox.showinfo("Thành công", "Đã phục hồi Database thành công!")
@@ -200,3 +210,91 @@ class PatientController:
             self.stats_view.update(stats)
         except Exception as e:
             messagebox.showerror("Lỗi", f"Lỗi tải thống kê: {e}")
+
+
+    # ------------------------------------------------------------------
+    # Lịch Tái Khám
+    # ------------------------------------------------------------------
+    def load_follow_ups(self, search: str = ""):
+        """Tải danh sách lịch tái khám và cập nhật tóm tắt."""
+        try:
+            rows = self.model.get_follow_ups(search)
+            self.follow_up_view.refresh_list(rows)
+ 
+            stats = self.model.get_follow_up_stats()
+            self.follow_up_view.update_summary(stats)
+        except Exception as e:
+            messagebox.showerror("Lỗi", f"Lỗi tải lịch tái khám: {e}")
+ 
+    def save_follow_up(self, data: dict):
+        """Validate và lưu lịch tái khám mới."""
+        if not data["patient_id"]:
+            messagebox.showwarning("Thiếu thông tin", "Vui lòng nhập ID Bệnh nhân!")
+            return
+        if not data["appointment_date"]:
+            messagebox.showwarning("Thiếu thông tin", "Vui lòng nhập Ngày tái khám!")
+            return
+ 
+        # Validate patient_id là số nguyên
+        try:
+            patient_id = int(data["patient_id"])
+        except ValueError:
+            messagebox.showwarning("ID không hợp lệ", "ID Bệnh nhân phải là số nguyên!")
+            return
+ 
+        # Kiểm tra bệnh nhân tồn tại
+        patient = self.model.get_patient_by_id(patient_id)
+        if not patient:
+            messagebox.showwarning("Không tìm thấy",
+                                   f"Không có bệnh nhân với ID = {patient_id}!")
+            return
+ 
+        # Validate định dạng ngày
+        try:
+            datetime.strptime(data["appointment_date"], "%Y-%m-%d")
+        except ValueError:
+            messagebox.showwarning("Ngày không hợp lệ",
+                                   "Định dạng ngày phải là YYYY-MM-DD\n"
+                                   "Ví dụ: 2025-12-31")
+            return
+ 
+        try:
+            self.model.add_follow_up(
+                patient_id=patient_id,
+                appointment_date=data["appointment_date"],
+                reason=data["reason"],
+                frequency=data["frequency"],
+            )
+            messagebox.showinfo("Thành công",
+                                f"Đã thêm lịch tái khám cho: {patient[1]}")
+            self.follow_up_view.clear_form()
+            self.load_follow_ups()
+        except Exception as e:
+            messagebox.showerror("Lỗi CSDL", str(e))
+ 
+    def delete_follow_up(self, follow_up_id: int):
+        confirm = messagebox.askyesno(
+            "Xác nhận xóa",
+            "Bạn có chắc chắn muốn xóa lịch tái khám này?\n"
+            "Hành động này không thể hoàn tác."
+        )
+        if confirm:
+            try:
+                self.model.delete_follow_up(follow_up_id)
+                self.load_follow_ups()
+                messagebox.showinfo("Thành công", "Đã xóa lịch tái khám.")
+            except Exception as e:
+                messagebox.showerror("Lỗi CSDL", str(e))
+ 
+    def lookup_patient_name(self, id_str: str):
+        """Tra cứu tên bệnh nhân theo ID để hiển thị gợi ý trong form."""
+        if not id_str:
+            self.follow_up_view.set_patient_name_label(None)
+            return
+        try:
+            patient_id = int(id_str)
+            name = self.model.get_patient_name_by_id(patient_id)
+            self.follow_up_view.set_patient_name_label(name)
+        except ValueError:
+            self.follow_up_view.set_patient_name_label(None)
+ 
