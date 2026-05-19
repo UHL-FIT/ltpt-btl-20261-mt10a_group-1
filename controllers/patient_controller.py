@@ -47,7 +47,6 @@ class PatientController:
         mv.on_clear_search = self.load_patients       # gọi không tham số → load tất cả
         mv.on_export_csv   = self.export_csv
         mv.on_double_click = self.show_detail
-        mv.on_add_follow_up = self.go_to_add_follow_up  # ← mới
 
         sv = self.stats_view
         sv.on_refresh = self.load_statistics
@@ -130,36 +129,54 @@ class PatientController:
         
 
     def save_patient(self, data: dict):
-        # Validate
+        # Validate bắt buộc
         if not data["name"] or not data["age"] or not data["primary_disease"]:
             messagebox.showwarning("Thiếu thông tin", "Vui lòng nhập ít nhất Họ tên, Tuổi và Bệnh chính!")
             return
-            
+
+        # Validate chiều cao / cân nặng (tuỳ chọn, nhưng nếu nhập phải là số)
+        height = None
+        weight = None
         try:
-            editing_id = self.manage_view.current_editing_id # Kiểm tra xem View có đang ở trạng thái Sửa không
-            
+            if data["height"]:
+                height = float(data["height"])
+                if height <= 0 or height > 300:
+                    raise ValueError
+        except ValueError:
+            messagebox.showwarning("Chiều cao không hợp lệ", "Chiều cao phải là số dương (cm), ví dụ: 170")
+            return
+        try:
+            if data["weight"]:
+                weight = float(data["weight"])
+                if weight <= 0 or weight > 500:
+                    raise ValueError
+        except ValueError:
+            messagebox.showwarning("Cân nặng không hợp lệ", "Cân nặng phải là số dương (kg), ví dụ: 65")
+            return
+
+        try:
+            editing_id = self.manage_view.current_editing_id
+
             if editing_id:
-                # TRẠNG THÁI SỬA (UPDATE)
-                # Chuyển dict thành tuple và nhét ID vào cuối để khớp với câu lệnh SQL UPDATE
                 update_tuple = (
                     data["name"], data["age"], data["gender"], data["phone"],
-                    data["receive_time"], data["primary_disease"], data["secondary_disease"], 
-                    data["history"], editing_id
+                    data["receive_time"], data["primary_disease"],
+                    data["history"], height, weight, editing_id
                 )
                 self.model.update_patient(editing_id, update_tuple)
                 messagebox.showinfo("Thành công", f"Đã cập nhật hồ sơ: {data['name']}")
             else:
-                # TRẠNG THÁI THÊM MỚI (INSERT)
                 insert_tuple = (
                     data["name"], data["age"], data["gender"], data["phone"],
-                    data["receive_time"], data["primary_disease"], data["secondary_disease"], data["history"]
+                    data["receive_time"], data["primary_disease"],
+                    data["history"], height, weight
                 )
                 self.model.add_patient(insert_tuple)
                 messagebox.showinfo("Thành công", f"Đã thêm hồ sơ mới: {data['name']}")
-                
+
             self.load_patients()
-            self.manage_view.clear_form() # Form clear sẽ tự động reset biến editing_id về None
-            
+            self.manage_view.clear_form()
+
         except Exception as e:
             messagebox.showerror("Lỗi CSDL", str(e))
 
@@ -195,7 +212,8 @@ class PatientController:
             with open(file_path, mode='w', newline='', encoding='utf-8-sig') as f:
                 writer = csv.writer(f)
                 writer.writerow(["Họ tên", "Tuổi", "Giới tính", "Số điện thoại",
-                                  "Thời gian nhận", "Bệnh chính", "Bệnh phụ", "Lịch sử khám"])
+                                  "Thời gian nhận", "Bệnh chính", "Lịch sử khám",
+                                  "Chiều cao (cm)", "Cân nặng (kg)"])
                 writer.writerows(rows)
             messagebox.showinfo("Thành công", f"Đã xuất file:\n{file_path}")
         except Exception as e:
@@ -216,21 +234,6 @@ class PatientController:
     # ------------------------------------------------------------------
     # Lịch Tái Khám
     # ------------------------------------------------------------------
-    def go_to_add_follow_up(self, patient_id: int):
-        """Chuyển sang tab Lịch Tái Khám và điền sẵn ID bệnh nhân đã chọn."""
-        patient = self.model.get_patient_by_id(patient_id)
-        if not patient:
-            return
-        patient_name = patient[1]
-
-        # Chuyển notebook sang tab Lịch Tái Khám (index 2)
-        notebook = self.root.nametowidget(self.follow_up_view.winfo_parent())
-        notebook.select(2)
-
-        # Điền ID + tên vào form
-        self.follow_up_view.set_patient_id(patient_id, patient_name)
-        self.load_follow_ups()
-
     def load_follow_ups(self, search: str = ""):
         """Tải danh sách lịch tái khám và cập nhật tóm tắt."""
         try:

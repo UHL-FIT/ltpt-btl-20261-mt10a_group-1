@@ -70,8 +70,42 @@ class StatsView(ttk.Frame):
         ttk.Label(text_frame, text="Top Bệnh Lý Phổ Biến:", font=("Arial", 11, "bold")).pack(anchor=tk.W)
         self.lbl_diseases.pack(anchor=tk.W, pady=5)
 
-        ttk.Button(text_frame, text="Làm mới dữ liệu",      command=lambda: self.on_refresh and self.on_refresh()).pack(side=tk.BOTTOM, fill=tk.X, pady=(5, 0))
-        ttk.Button(text_frame, text="Xuất biểu đồ PNG",  command=self._fire_export_png).pack(side=tk.BOTTOM, fill=tk.X, pady=(20, 5))
+        # ── Bảng BMI ──────────────────────────────────────────────────────
+        ttk.Label(text_frame, text="-" * 30).pack(anchor=tk.W, pady=(10, 5))
+        ttk.Label(text_frame, text="Thống Kê BMI:", font=("Arial", 11, "bold")).pack(anchor=tk.W)
+
+        bmi_tree_frame = ttk.Frame(text_frame)
+        bmi_tree_frame.pack(anchor=tk.W, fill=tk.X, pady=(5, 0))
+
+        bmi_cols = ("category", "count", "range")
+        self.bmi_tree = ttk.Treeview(bmi_tree_frame, columns=bmi_cols,
+                                     show="headings", height=4)
+        self.bmi_tree.heading("category", text="Phân loại")
+        self.bmi_tree.heading("count",    text="Số BN")
+        self.bmi_tree.heading("range",    text="Chỉ số BMI")
+        self.bmi_tree.column("category", width=100, anchor=tk.W)
+        self.bmi_tree.column("count",    width=60,  anchor=tk.CENTER)
+        self.bmi_tree.column("range",    width=110, anchor=tk.CENTER)
+        self.bmi_tree.pack(side=tk.LEFT, fill=tk.X)
+
+        # Tag màu cho từng hàng BMI
+        self.bmi_tree.tag_configure("underweight", foreground="#3498db")
+        self.bmi_tree.tag_configure("normal",      foreground="#27ae60")
+        self.bmi_tree.tag_configure("overweight",  foreground="#e67e22")
+        self.bmi_tree.tag_configure("obese",       foreground="#c0392b",
+                                    font=("TkDefaultFont", 10, "bold"))
+
+        self.lbl_bmi_note = ttk.Label(text_frame, text="",
+                                      font=("Arial", 9, "italic"),
+                                      foreground="gray")
+        self.lbl_bmi_note.pack(anchor=tk.W, pady=(3, 0))
+
+        ttk.Button(text_frame, text="Làm mới dữ liệu",
+                   command=lambda: self.on_refresh and self.on_refresh()).pack(
+            side=tk.BOTTOM, fill=tk.X, pady=(5, 0))
+        ttk.Button(text_frame, text="Xuất biểu đồ PNG",
+                   command=self._fire_export_png).pack(
+            side=tk.BOTTOM, fill=tk.X, pady=(20, 5))
 
         # Cột phải: biểu đồ
         self.chart_frame = ttk.LabelFrame(self, text="Biểu Đồ Trực Quan", padding=10)
@@ -83,9 +117,10 @@ class StatsView(ttk.Frame):
     def update(self, stats: dict):
         """
         Controller gọi hàm này sau khi lấy dữ liệu từ Model.
-        stats = {"total", "today", "gender_data", "disease_data"}
+        stats = {"total", "today", "gender_data", "disease_data",
+                 "bmi_list", "bmi_categories"}
         """
-        self._last_stats = stats   # cache để redraw khi theme thay đổi
+        self._last_stats = stats
 
         self.lbl_total.config(text=f"Tổng số hồ sơ: {stats['total']}")
         self.lbl_today.config(text=f"Bệnh nhân hôm nay: {stats['today']}")
@@ -95,24 +130,51 @@ class StatsView(ttk.Frame):
             disease_text += f"{i}. {disease} ({count} ca)\n"
         self.lbl_diseases.config(text=disease_text or "Chưa có dữ liệu.")
 
-        self._draw_charts(stats["gender_data"], stats["disease_data"])
+        # Cập nhật bảng BMI
+        self._update_bmi_table(stats.get("bmi_categories", {}),
+                               stats.get("bmi_list", []))
 
-    def _draw_charts(self, gender_data: list, disease_data: list):
-        # Hủy canvas cũ để tránh rò rỉ bộ nhớ
+        self._draw_charts(stats["gender_data"], stats["disease_data"],
+                          stats.get("bmi_categories", {}))
+
+    def _update_bmi_table(self, categories: dict, bmi_list: list):
+        for row in self.bmi_tree.get_children():
+            self.bmi_tree.delete(row)
+
+        rows = [
+            ("Thiếu cân",   categories.get("Thiếu cân",   0), "< 18.5",   "underweight"),
+            ("Bình thường", categories.get("Bình thường", 0), "18.5–24.9","normal"),
+            ("Thừa cân",    categories.get("Thừa cân",    0), "25–29.9",  "overweight"),
+            ("Béo phì",     categories.get("Béo phì",     0), "≥ 30",     "obese"),
+        ]
+        for cat, cnt, rng, tag in rows:
+            self.bmi_tree.insert("", tk.END, values=(cat, cnt, rng), tags=(tag,))
+
+        total_bmi = len(bmi_list)
+        obese = categories.get("Béo phì", 0)
+        if total_bmi > 0:
+            pct = round(obese / total_bmi * 100, 1)
+            self.lbl_bmi_note.config(
+                text=f"Tỉ lệ béo phì: {pct}%  ({total_bmi} BN có dữ liệu)")
+        else:
+            self.lbl_bmi_note.config(text="Chưa có dữ liệu chiều cao/cân nặng.")
+
+    def _draw_charts(self, gender_data: list, disease_data: list,
+                     bmi_categories: dict = None):
         if self._current_canvas:
             self._current_canvas.get_tk_widget().destroy()
             plt.close(self._current_fig)
 
         c = self._colors
-        is_dark = c.get('bg', '#f0f0f0')[1:3] < '88'  # heuristic: bg tối?
+        is_dark = c.get('bg', '#f0f0f0')[1:3] < '88'
         bar_color = _BAR_COLOR_DARK if is_dark else _BAR_COLOR_LIGHT
- 
-        fig = plt.Figure(figsize=(8, 4), dpi=100,
+
+        fig = plt.Figure(figsize=(12, 4), dpi=100,
                          facecolor=c.get('chart_bg', '#f9f9f9'))
         self._current_fig = fig
 
-        # Biểu đồ tròn – Giới tính
-        ax1 = fig.add_subplot(121, facecolor=c.get('tree_bg', '#ffffff'))
+        # ── Biểu đồ 1: Giới tính ─────────────────────────────────────────
+        ax1 = fig.add_subplot(131, facecolor=c.get('tree_bg', '#ffffff'))
         if gender_data:
             labels = [str(r[0]) for r in gender_data if r[0]]
             sizes  = [r[1]      for r in gender_data if r[0]]
@@ -121,18 +183,13 @@ class StatsView(ttk.Frame):
                 colors=_PIE_COLORS)
             for text in texts + autotexts:
                 text.set_color(c.get('chart_fg', '#1a1a1a'))
-            ax1.set_title("Tỉ Lệ Giới Tính",
-                          color=c.get('chart_fg', '#1a1a1a'))
         else:
-            ax1.text(0.5, 0.5, "Không có dữ liệu",
-                     ha='center', va='center',
+            ax1.text(0.5, 0.5, "Không có dữ liệu", ha='center', va='center',
                      color=c.get('chart_fg', '#1a1a1a'))
-            ax1.set_title("Tỉ Lệ Giới Tính",
-                          color=c.get('chart_fg', '#1a1a1a'))
+        ax1.set_title("Tỉ Lệ Giới Tính", color=c.get('chart_fg', '#1a1a1a'))
 
-        # Biểu đồ ngang – Top bệnh
-        # ── Bar chart – Top bệnh ──────────────────────────────────────────
-        ax2 = fig.add_subplot(122, facecolor=c.get('tree_bg', '#ffffff'))
+        # ── Biểu đồ 2: Top bệnh ──────────────────────────────────────────
+        ax2 = fig.add_subplot(132, facecolor=c.get('tree_bg', '#ffffff'))
         if disease_data:
             d_labels = [
                 str(r[0])[:15] + ('…' if len(str(r[0])) > 15 else '')
@@ -140,34 +197,50 @@ class StatsView(ttk.Frame):
             ]
             d_sizes = [r[1] for r in disease_data]
             d_labels.reverse(); d_sizes.reverse()
- 
+
             bars = ax2.barh(d_labels, d_sizes, color=bar_color,
                             edgecolor=c.get('border', '#cccccc'))
-            ax2.set_title("Top 5 Bệnh Chính",
-                          color=c.get('chart_fg', '#1a1a1a'))
+            ax2.set_title("Top 5 Bệnh Chính", color=c.get('chart_fg', '#1a1a1a'))
             ax2.set_xlabel("Số ca", color=c.get('chart_fg', '#1a1a1a'))
             ax2.tick_params(colors=c.get('chart_fg', '#1a1a1a'))
             ax2.spines['bottom'].set_color(c.get('border', '#cccccc'))
             ax2.spines['left'].set_color(c.get('border', '#cccccc'))
             ax2.spines['top'].set_visible(False)
             ax2.spines['right'].set_visible(False)
-            ax2.set_facecolor(c.get('tree_bg', '#ffffff'))
- 
             for bar in bars:
                 ax2.text(bar.get_width() + 0.1,
                          bar.get_y() + bar.get_height() / 2,
-                         f'{int(bar.get_width())}',
-                         va='center',
+                         f'{int(bar.get_width())}', va='center',
                          color=c.get('chart_fg', '#1a1a1a'))
         else:
-            ax2.text(0.5, 0.5, "Không có dữ liệu",
-                     ha='center', va='center',
+            ax2.text(0.5, 0.5, "Không có dữ liệu", ha='center', va='center',
                      color=c.get('chart_fg', '#1a1a1a'))
-            ax2.set_title("Top 5 Bệnh Chính",
-                          color=c.get('chart_fg', '#1a1a1a'))
- 
+            ax2.set_title("Top 5 Bệnh Chính", color=c.get('chart_fg', '#1a1a1a'))
+
+        # ── Biểu đồ 3: Tỉ lệ BMI / Béo phì ─────────────────────────────
+        ax3 = fig.add_subplot(133, facecolor=c.get('tree_bg', '#ffffff'))
+        bmi_cats = bmi_categories or {}
+        bmi_vals = [bmi_cats.get(k, 0) for k in
+                    ["Thiếu cân", "Bình thường", "Thừa cân", "Béo phì"]]
+        bmi_labels = ["Thiếu cân", "Bình thường", "Thừa cân", "Béo phì"]
+        bmi_colors = ["#3498db", "#27ae60", "#e67e22", "#c0392b"]
+
+        if sum(bmi_vals) > 0:
+            wedges, texts, autotexts = ax3.pie(
+                bmi_vals, labels=bmi_labels, autopct='%1.1f%%',
+                startangle=90, colors=bmi_colors)
+            for text in texts + autotexts:
+                text.set_color(c.get('chart_fg', '#1a1a1a'))
+                text.set_fontsize(8)
+        else:
+            ax3.text(0.5, 0.5, "Chưa có dữ liệu\nchiều cao/cân nặng",
+                     ha='center', va='center',
+                     color=c.get('chart_fg', '#1a1a1a'), fontsize=9)
+        ax3.set_title("Phân Loại BMI & Béo Phì",
+                      color=c.get('chart_fg', '#1a1a1a'))
+
         fig.tight_layout(pad=2.0)
- 
+
         self._current_canvas = FigureCanvasTkAgg(fig, master=self.chart_frame)
         self._current_canvas.draw()
         self._current_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
@@ -189,7 +262,8 @@ class StatsView(ttk.Frame):
         if self._last_stats is not None:
             self._draw_charts(
                 self._last_stats['gender_data'],
-                self._last_stats['disease_data']
+                self._last_stats['disease_data'],
+                self._last_stats.get('bmi_categories', {})
             )
  
 

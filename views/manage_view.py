@@ -48,10 +48,9 @@ class ManageView(ttk.Frame):
     def _build_form(self, parent):
         labels = [
             "Họ và tên:", "Tuổi:", "Giới tính:", "Số điện thoại:",
-            "Thời gian nhận:", "Bệnh chính:", "Bệnh phụ:",
+            "Thời gian nhận:", "Bệnh chính:",
         ]
  
-        # BUG FIX: đặt tên nhất quán – dùng entry_primary / entry_secondary
         self.entry_name      = ttk.Entry(parent, width=30)
         self.entry_age       = ttk.Entry(parent, width=30)
         self.combo_gender    = ttk.Combobox(parent,
@@ -60,13 +59,11 @@ class ManageView(ttk.Frame):
         self.combo_gender.current(0)
         self.entry_phone     = ttk.Entry(parent, width=30)
         self.entry_time      = ttk.Entry(parent, width=30)
-        self.entry_primary   = ttk.Entry(parent, width=30)   # ← tên chính xác
-        self.entry_secondary = ttk.Entry(parent, width=30)   # ← tên chính xác
+        self.entry_primary   = ttk.Entry(parent, width=30)
  
         widgets = [
             self.entry_name, self.entry_age, self.combo_gender,
-            self.entry_phone, self.entry_time,
-            self.entry_primary, self.entry_secondary,
+            self.entry_phone, self.entry_time, self.entry_primary,
         ]
  
         for i, (lbl, w) in enumerate(zip(labels, widgets)):
@@ -76,14 +73,25 @@ class ManageView(ttk.Frame):
         # Giá trị mặc định cho thời gian
         self.entry_time.insert(0, datetime.now().strftime("%Y-%m-%d %H:%M"))
 
+        # Chiều cao + Cân nặng trên cùng một hàng
+        row_hw = len(labels)
+        ttk.Label(parent, text="Chiều cao (cm):").grid(row=row_hw, column=0, sticky=tk.W, pady=5)
+        hw_frame = ttk.Frame(parent)
+        hw_frame.grid(row=row_hw, column=1, sticky=tk.W, pady=5, padx=(5, 0))
+        self.entry_height = ttk.Entry(hw_frame, width=8)
+        self.entry_height.pack(side=tk.LEFT)
+        ttk.Label(hw_frame, text="  Cân nặng (kg):").pack(side=tk.LEFT)
+        self.entry_weight = ttk.Entry(hw_frame, width=8)
+        self.entry_weight.pack(side=tk.LEFT)
+
         # Lịch sử khám
-        ttk.Label(parent, text="Lịch sử khám:").grid(row=7, column=0, sticky=tk.NW, pady=5)
-        self.text_history = tk.Text(parent, width=30, height=8, font=("TkDefaultFont", 10))
-        self.text_history.grid(row=7, column=1, pady=5)
+        ttk.Label(parent, text="Lịch sử khám:").grid(row=row_hw+1, column=0, sticky=tk.NW, pady=5)
+        self.text_history = tk.Text(parent, width=30, height=7, font=("TkDefaultFont", 10))
+        self.text_history.grid(row=row_hw+1, column=1, pady=5)
 
         # Nút bấm
         btn_frame = ttk.Frame(parent)
-        btn_frame.grid(row=8, column=0, columnspan=2, pady=20)
+        btn_frame.grid(row=row_hw+2, column=0, columnspan=2, pady=20)
         ttk.Button(btn_frame, text="Lưu Hồ Sơ",   command=self._fire_save).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Làm Mới Form", command=self.clear_form).pack(side=tk.LEFT, padx=5)
 
@@ -115,16 +123,18 @@ class ManageView(ttk.Frame):
         tree_frame = ttk.Frame(parent)
         tree_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
-        cols = ("id", "name", "age", "gender", "time", "primary", "secondary")
+        cols = ("id", "name", "age", "gender", "time", "primary", "height", "weight")
         self.tree = ttk.Treeview(tree_frame, columns=cols, show="headings", selectmode="browse")
 
         headers = {"id": "ID", "name": "Họ tên", "age": "Tuổi", "gender": "Giới tính",
-                   "time": "Thời gian nhận", "primary": "Bệnh chính", "secondary": "Bệnh phụ"}
-        widths  = {"id": 45, "name": 150, "age": 50, "gender": 80, "time": 120, "primary": 150, "secondary": 150}
+                   "time": "Thời gian nhận", "primary": "Bệnh chính",
+                   "height": "C.cao (cm)", "weight": "C.nặng (kg)"}
+        widths  = {"id": 45, "name": 150, "age": 50, "gender": 80, "time": 120,
+                   "primary": 150, "height": 80, "weight": 80}
 
         for col in cols:
             self.tree.heading(col, text=headers[col])
-            anchor = tk.CENTER if col in ("id", "age", "gender", "time") else tk.W
+            anchor = tk.CENTER if col in ("id", "age", "gender", "time", "height", "weight") else tk.W
             self.tree.column(col, width=widths[col], anchor=anchor, minwidth=30)
 
         scrollbar = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.tree.yview)
@@ -189,47 +199,38 @@ class ManageView(ttk.Frame):
 
     def fill_form_for_edit(self, patient_id: int, patient_data: tuple):
         """
-        BUG FIX #3: dùng đúng tên attribute (entry_primary / entry_secondary).
         patient_data = (id, name, age, gender, phone, receive_time,
-                        primary_disease, secondary_disease, history)
+                        primary_disease, history, height, weight)
         """
         self.clear_form()
         self.current_editing_id = patient_id
         self.left_frame.config(text="✏️ Đang Sửa Hồ Sơ Bệnh Nhân")
  
-        self.entry_name.insert(0,      patient_data[1] or "")
-        self.entry_age.insert(0,       str(patient_data[2]) if patient_data[2] else "")
-        self.combo_gender.set(         patient_data[3] or "Nam")
-        self.entry_phone.insert(0,     patient_data[4] or "")
+        self.entry_name.insert(0,    patient_data[1] or "")
+        self.entry_age.insert(0,     str(patient_data[2]) if patient_data[2] else "")
+        self.combo_gender.set(       patient_data[3] or "Nam")
+        self.entry_phone.insert(0,   patient_data[4] or "")
         self.entry_time.delete(0, tk.END)
-        self.entry_time.insert(0,      patient_data[5] or "")
-        self.entry_primary.insert(0,   patient_data[6] or "")    # ← tên đúng
-        self.entry_secondary.insert(0, patient_data[7] or "")    # ← tên đúng
-        self.text_history.insert("1.0", patient_data[8] or "")
+        self.entry_time.insert(0,    patient_data[5] or "")
+        self.entry_primary.insert(0, patient_data[6] or "")
+        self.text_history.insert("1.0", patient_data[7] or "")
+        self.entry_height.insert(0,  str(patient_data[8]) if patient_data[8] else "")
+        self.entry_weight.insert(0,  str(patient_data[9]) if patient_data[9] else "")
  
 
     def clear_form(self):
-        """Ghi đè lại clear form cũ: Xóa sạch thì cũng phải reset biến editing_id"""
-        """
-        BUG FIX #2: gộp hai clear_form() thành một.
-        Xóa sạch form và reset trạng thái chỉnh sửa.
-        """
+        """Xóa sạch form và reset trạng thái chỉnh sửa."""
         self.current_editing_id = None
-        self.left_frame.config(text="Nhập Thông Tin Bệnh Nhân") # Trả lại tiêu đề gốc
+        self.left_frame.config(text="Nhập Thông Tin Bệnh Nhân")
 
         for attr in ("entry_name", "entry_age", "entry_phone",
-                     "entry_primary", "entry_secondary"):
+                     "entry_primary", "entry_height", "entry_weight"):
             getattr(self, attr).delete(0, tk.END)
-        
-        self.entry_name.delete(0, tk.END)
-        self.entry_age.delete(0, tk.END)
+
         self.combo_gender.current(0)
-        self.entry_phone.delete(0, tk.END)
         self.entry_time.delete(0, tk.END)
         from datetime import datetime
         self.entry_time.insert(0, datetime.now().strftime("%Y-%m-%d %H:%M"))
-        self.entry_primary.delete(0, tk.END)
-        self.entry_secondary.delete(0, tk.END)
         self.text_history.delete("1.0", tk.END)
 
     # ------------------------------------------------------------------
@@ -237,14 +238,15 @@ class ManageView(ttk.Frame):
     # ------------------------------------------------------------------
     def get_form_data(self) -> dict:
         return {
-            "name":              self.entry_name.get().strip(),
-            "age":               self.entry_age.get().strip(),
-            "gender":            self.combo_gender.get(),
-            "phone":             self.entry_phone.get().strip(),
-            "receive_time":      self.entry_time.get().strip(),
-            "primary_disease":   self.entry_primary.get().strip(),
-            "secondary_disease": self.entry_secondary.get().strip(),
-            "history":           self.text_history.get("1.0", tk.END).strip(),
+            "name":            self.entry_name.get().strip(),
+            "age":             self.entry_age.get().strip(),
+            "gender":          self.combo_gender.get(),
+            "phone":           self.entry_phone.get().strip(),
+            "receive_time":    self.entry_time.get().strip(),
+            "primary_disease": self.entry_primary.get().strip(),
+            "history":         self.text_history.get("1.0", tk.END).strip(),
+            "height":          self.entry_height.get().strip(),
+            "weight":          self.entry_weight.get().strip(),
         }
 
     def get_selected_patient_id(self) -> int | None:
@@ -276,13 +278,13 @@ class ManageView(ttk.Frame):
             f"Số điện thoại: {patient[4]}\n"
             f"Thời gian nhận: {patient[5]}\n\n"
             f"Bệnh chính: {patient[6]}\n"
-            f"Bệnh phụ:   {patient[7]}"
+            f"Chiều cao: {patient[8] or '—'} cm  |  Cân nặng: {patient[9] or '—'} kg"
         )
         ttk.Label(frame, text=info, justify=tk.LEFT).pack(anchor=tk.W)
 
         ttk.Label(frame, text="Lịch sử khám:", font=("TkDefaultFont", 10, "bold")).pack(anchor=tk.W, pady=(15, 5))
         history_box = tk.Text(frame, width=50, height=12, wrap=tk.WORD, font=("TkDefaultFont", 10))
-        history_box.insert("1.0", patient[8] or "Không có ghi chú.")
+        history_box.insert("1.0", patient[7] or "Không có ghi chú.")
         history_box.config(state=tk.DISABLED)
         history_box.pack(fill=tk.BOTH, expand=True)
 

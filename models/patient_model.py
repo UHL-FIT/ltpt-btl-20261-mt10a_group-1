@@ -31,10 +31,17 @@ class PatientModel:
                     phone            TEXT,
                     receive_time     TEXT,
                     primary_disease  TEXT,
-                    secondary_disease TEXT,
-                    history          TEXT
+                    history          TEXT,
+                    height           REAL,
+                    weight           REAL
                 )
             ''')
+            # Migration an toàn cho DB cũ
+            for col, col_type in [("height", "REAL"), ("weight", "REAL")]:
+                try:
+                    conn.execute(f"ALTER TABLE patients ADD COLUMN {col} {col_type}")
+                except Exception:
+                    pass
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS follow_up_appointments (
                     id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,13 +58,13 @@ class PatientModel:
     # CRUD
     # ------------------------------------------------------------------
     def add_patient(self, data: tuple) -> None:
-        """Thêm một bệnh nhân mới. data là dict chứa các trường."""
+        """Thêm một bệnh nhân mới. data là tuple chứa các trường."""
         with sqlite3.connect(self.db_path) as conn:
             conn.execute('''
                 INSERT INTO patients
                     (name, age, gender, phone, receive_time,
-                     primary_disease, secondary_disease, history)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                     primary_disease, history, height, weight)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', data)
             conn.commit()
 
@@ -70,11 +77,11 @@ class PatientModel:
     def update_patient(self, patient_id: int, data: tuple) -> None:
         """Hàm dùng để cập nhật thông tin bệnh nhân (Tính năng Sửa)"""
         with sqlite3.connect(self.db_path) as conn:
-            # data là tuple: (name, age, gender, phone, receive_time, primary_disease, secondary_disease, history, patient_id)
+            # data là tuple: (name, age, gender, phone, receive_time, primary_disease, history, height, weight, patient_id)
             conn.execute('''
                 UPDATE patients 
                 SET name=?, age=?, gender=?, phone=?, receive_time=?, 
-                    primary_disease=?, secondary_disease=?, history=?
+                    primary_disease=?, history=?, height=?, weight=?
                 WHERE id=?
             ''', data)
             conn.commit()
@@ -91,14 +98,14 @@ class PatientModel:
             if query.strip():
                 clean = remove_accents(query.strip())
                 rows = conn.execute('''
-                    SELECT id, name, age, gender, receive_time, primary_disease, secondary_disease
+                    SELECT id, name, age, gender, receive_time, primary_disease, height, weight
                     FROM patients
                     WHERE REMOVE_ACCENTS(name) LIKE ? OR phone LIKE ?
                     ORDER BY id DESC
                 ''', (f"%{clean}%", f"%{query.strip()}%")).fetchall()
             else:
                 rows = conn.execute('''
-                    SELECT id, name, age, gender, receive_time, primary_disease, secondary_disease
+                    SELECT id, name, age, gender, receive_time, primary_disease, height, weight
                     FROM patients ORDER BY id DESC
                 ''').fetchall()
         return rows
@@ -108,7 +115,7 @@ class PatientModel:
         with sqlite3.connect(self.db_path) as conn:
             return conn.execute('''
                 SELECT name, age, gender, phone, receive_time,
-                       primary_disease, secondary_disease, history
+                       primary_disease, history, height, weight
                 FROM patients ORDER BY id DESC
             ''').fetchall()
 
@@ -139,11 +146,37 @@ class PatientModel:
                 ORDER BY COUNT(*) DESC LIMIT 5
             ''').fetchall()
 
+            # Dữ liệu BMI – chỉ lấy những bệnh nhân có đủ chiều cao & cân nặng
+            bmi_rows = conn.execute('''
+                SELECT name, height, weight
+                FROM patients
+                WHERE height IS NOT NULL AND weight IS NOT NULL
+                  AND height > 0 AND weight > 0
+            ''').fetchall()
+
+        # Phân loại BMI
+        bmi_categories = {"Thiếu cân": 0, "Bình thường": 0,
+                          "Thừa cân": 0, "Béo phì": 0}
+        bmi_list = []
+        for name, h, w in bmi_rows:
+            bmi = w / ((h / 100) ** 2)
+            bmi_list.append((name, round(bmi, 1)))
+            if bmi < 18.5:
+                bmi_categories["Thiếu cân"] += 1
+            elif bmi < 25:
+                bmi_categories["Bình thường"] += 1
+            elif bmi < 30:
+                bmi_categories["Thừa cân"] += 1
+            else:
+                bmi_categories["Béo phì"] += 1
+
         return {
             "total": total,
             "today": today,
             "gender_data": gender_data,
             "disease_data": disease_data,
+            "bmi_list": bmi_list,
+            "bmi_categories": bmi_categories,
         }
 
     # ------------------------------------------------------------------
