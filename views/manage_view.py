@@ -27,6 +27,7 @@ class ManageView(ttk.Frame):
         self.on_clear_search = None
         self.on_export_csv  = None
         self.on_double_click = None
+        self.on_add_follow_up = None   # ← mới: chuyển sang tab lịch tái khám
         self.current_editing_id: int | None = None
         
         self._build()
@@ -107,22 +108,24 @@ class ManageView(ttk.Frame):
         action_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
         ttk.Button(action_frame, text="Sửa Hồ Sơ Đã Chọn", command=self._on_edit_click).pack(side=tk.RIGHT, padx=5)
         ttk.Button(action_frame, text="Xóa Hồ Sơ Đã Chọn", command=self._fire_delete).pack(side=tk.RIGHT)
+        ttk.Button(action_frame, text="📅 Thêm Lịch Tái Khám",
+                   command=self._fire_add_follow_up).pack(side=tk.LEFT, padx=5)
 
         # Bảng dữ liệu
         tree_frame = ttk.Frame(parent)
         tree_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
-        cols = ("name", "age", "gender", "time", "primary", "secondary")
+        cols = ("id", "name", "age", "gender", "time", "primary", "secondary")
         self.tree = ttk.Treeview(tree_frame, columns=cols, show="headings", selectmode="browse")
 
-        headers = {"name": "Họ tên", "age": "Tuổi", "gender": "Giới tính",
+        headers = {"id": "ID", "name": "Họ tên", "age": "Tuổi", "gender": "Giới tính",
                    "time": "Thời gian nhận", "primary": "Bệnh chính", "secondary": "Bệnh phụ"}
-        widths  = {"name": 150, "age": 50, "gender": 80, "time": 120, "primary": 150, "secondary": 150}
+        widths  = {"id": 45, "name": 150, "age": 50, "gender": 80, "time": 120, "primary": 150, "secondary": 150}
 
         for col in cols:
             self.tree.heading(col, text=headers[col])
-            anchor = tk.CENTER if col in ("age", "gender", "time") else tk.W
-            self.tree.column(col, width=widths[col], anchor=anchor, minwidth=40)
+            anchor = tk.CENTER if col in ("id", "age", "gender", "time") else tk.W
+            self.tree.column(col, width=widths[col], anchor=anchor, minwidth=30)
 
         scrollbar = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscroll=scrollbar.set)
@@ -163,20 +166,25 @@ class ManageView(ttk.Frame):
         if self.on_edit:
             self.on_edit()
 
+    def _fire_add_follow_up(self):
+        pid = self.get_selected_patient_id()
+        if pid is None:
+            from tkinter import messagebox
+            messagebox.showwarning("Chưa chọn bệnh nhân", "Vui lòng chọn một bệnh nhân trước!")
+            return
+        if self.on_add_follow_up:
+            self.on_add_follow_up(pid)
+
     def refresh_list(self, rows: list[tuple]):
         """Cập nhật danh sách bệnh nhân trên bảng (Treeview)"""
-        # 1. Xóa toàn bộ dữ liệu cũ đang hiển thị trên bảng
         for item in self.tree.get_children():
             self.tree.delete(item)
-            
-        # 2. Chèn dữ liệu mới vào bảng
+
         for row in rows:
-            # Dữ liệu (row) trả về từ DB có dạng: 
-            # (id, name, age, gender, receive_time, primary_disease, secondary_disease)
+            # row: (id, name, age, gender, receive_time, primary_disease, secondary_disease)
             patient_id = row[0]
-            display_values = row[1:] # Bỏ id ra, chỉ lấy các thông tin còn lại để hiển thị
-            
-            # iid=patient_id giúp lưu id ẩn dưới mỗi dòng để dùng cho chức năng Sửa/Xóa
+            display_values = (patient_id,) + row[1:]  # Hiển thị cả ID ở cột đầu
+
             self.tree.insert("", tk.END, iid=patient_id, values=display_values)
 
     def fill_form_for_edit(self, patient_id: int, patient_data: tuple):

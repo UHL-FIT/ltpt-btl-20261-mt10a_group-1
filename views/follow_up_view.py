@@ -317,6 +317,13 @@ class FollowUpView(ttk.Frame):
             self.lbl_patient_name.config(
                 text="  → Không tìm thấy bệnh nhân", foreground="#c0392b")
 
+    def set_patient_id(self, patient_id: int, patient_name: str):
+        """Gọi từ tab Quản lý để điền sẵn ID + tên bệnh nhân vào form."""
+        self.entry_patient_id.delete(0, tk.END)
+        self.entry_patient_id.insert(0, str(patient_id))
+        self.lbl_patient_name.config(
+            text=f"  → {patient_name}", foreground="#0078d4")
+
     def clear_form(self):
         self.entry_patient_id.delete(0, tk.END)
         self.lbl_patient_name.config(text="")

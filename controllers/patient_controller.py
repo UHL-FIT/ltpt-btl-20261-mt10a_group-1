@@ -47,6 +47,7 @@ class PatientController:
         mv.on_clear_search = self.load_patients       # gọi không tham số → load tất cả
         mv.on_export_csv   = self.export_csv
         mv.on_double_click = self.show_detail
+        mv.on_add_follow_up = self.go_to_add_follow_up  # ← mới
 
         sv = self.stats_view
         sv.on_refresh = self.load_statistics
@@ -215,6 +216,21 @@ class PatientController:
     # ------------------------------------------------------------------
     # Lịch Tái Khám
     # ------------------------------------------------------------------
+    def go_to_add_follow_up(self, patient_id: int):
+        """Chuyển sang tab Lịch Tái Khám và điền sẵn ID bệnh nhân đã chọn."""
+        patient = self.model.get_patient_by_id(patient_id)
+        if not patient:
+            return
+        patient_name = patient[1]
+
+        # Chuyển notebook sang tab Lịch Tái Khám (index 2)
+        notebook = self.root.nametowidget(self.follow_up_view.winfo_parent())
+        notebook.select(2)
+
+        # Điền ID + tên vào form
+        self.follow_up_view.set_patient_id(patient_id, patient_name)
+        self.load_follow_ups()
+
     def load_follow_ups(self, search: str = ""):
         """Tải danh sách lịch tái khám và cập nhật tóm tắt."""
         try:
