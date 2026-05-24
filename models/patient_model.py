@@ -170,6 +170,44 @@ class PatientModel:
             else:
                 bmi_categories["Béo phì"] += 1
 
+        with sqlite3.connect(self.db_path) as conn2:
+            monthly_patients = conn2.execute('''
+                SELECT strftime('%Y-%m', receive_time) AS month, COUNT(*) AS cnt
+                FROM patients
+                WHERE receive_time IS NOT NULL AND receive_time != ''
+                GROUP BY month
+                ORDER BY month ASC
+            ''').fetchall()
+
+            monthly_followups = conn2.execute('''
+                SELECT strftime('%Y-%m', appointment_date) AS month, COUNT(*) AS cnt
+                FROM follow_up_appointments
+                WHERE appointment_date IS NOT NULL AND appointment_date != ''
+                GROUP BY month
+                ORDER BY month ASC
+            ''').fetchall()
+
+            # Top 10 bệnh chính kèm số Nam / Nữ
+            disease_gender_raw = conn2.execute('''
+                SELECT primary_disease, gender, COUNT(*) AS cnt
+                FROM patients
+                WHERE primary_disease IS NOT NULL AND primary_disease != ''
+                GROUP BY primary_disease, gender
+            ''').fetchall()
+
+        # Tổng hợp top 10 bệnh kèm giới tính
+        from collections import defaultdict
+        disease_agg: dict = defaultdict(lambda: {"Nam": 0, "Nữ": 0, "Khác": 0, "total": 0})
+        for disease, gender, cnt in disease_gender_raw:
+            g = gender if gender in ("Nam", "Nữ") else "Khác"
+            disease_agg[disease][g] += cnt
+            disease_agg[disease]["total"] += cnt
+        disease_gender_data = sorted(
+            [(d, v["total"], v["Nam"], v["Nữ"], v["Khác"])
+             for d, v in disease_agg.items()],
+            key=lambda x: x[1], reverse=True
+        )[:10]
+
         return {
             "total": total,
             "today": today,
@@ -177,6 +215,9 @@ class PatientModel:
             "disease_data": disease_data,
             "bmi_list": bmi_list,
             "bmi_categories": bmi_categories,
+            "monthly_patients": monthly_patients,
+            "monthly_followups": monthly_followups,
+            "disease_gender_data": disease_gender_data,
         }
 
     # ------------------------------------------------------------------
