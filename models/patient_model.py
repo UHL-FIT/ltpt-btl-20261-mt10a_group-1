@@ -287,6 +287,18 @@ class PatientModel:
                 "SELECT name FROM patients WHERE id = ?", (patient_id,)
             ).fetchone()
         return row[0] if row else None
+
+    def get_follow_up_by_id(self, follow_up_id: int) -> tuple | None:
+        """Lấy chi tiết một lịch tái khám theo ID (join với patients)."""
+        with sqlite3.connect(self.db_path) as conn:
+            row = conn.execute('''
+                SELECT f.id, f.patient_id, p.name, p.phone,
+                       f.appointment_date, f.reason, f.frequency
+                FROM follow_up_appointments f
+                JOIN patients p ON p.id = f.patient_id
+                WHERE f.id = ?
+            ''', (follow_up_id,)).fetchone()
+        return row
  
     def get_follow_up_stats(self) -> dict:
         """Thống kê tóm tắt cho dashboard lịch tái khám."""

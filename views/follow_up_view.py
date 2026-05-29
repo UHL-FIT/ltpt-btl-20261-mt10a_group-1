@@ -9,7 +9,7 @@ from datetime import datetime, date, timedelta
 
 
 # Nhãn định kì
-FREQUENCY_OPTIONS = ["Hàng tuần", "Hàng tháng", "Hàng năm"]
+FREQUENCY_OPTIONS = ["Không", "Hàng tuần", "Hàng tháng", "Hàng năm"]
 
 # Màu trạng thái (sẽ được ghi đè theo theme)
 _STATUS_COLORS = {
@@ -59,6 +59,7 @@ class FollowUpView(ttk.Frame):
         self.on_search       = None
         self.on_clear_search = None
         self.on_lookup_id    = None   # tra cứu tên khi nhập ID
+        self.on_double_click = None   # xem chi tiết khi nháy đúp
 
         self._is_dark = False
         self._build()
@@ -134,7 +135,7 @@ class FollowUpView(ttk.Frame):
             row=5, column=0, sticky=tk.W, pady=6)
         self.combo_freq = ttk.Combobox(parent, values=FREQUENCY_OPTIONS,
                                        width=25, state="readonly")
-        self.combo_freq.current(1)   # mặc định "Hàng tháng"
+        self.combo_freq.current(2)   # mặc định "Hàng tháng"
         self.combo_freq.grid(row=5, column=1, pady=6, padx=(5, 0))
 
         # Nút bấm
@@ -183,7 +184,7 @@ class FollowUpView(ttk.Frame):
         ttk.Button(search_frame, text="Xóa bộ lọc",
                    command=self._fire_clear_search).pack(side=tk.LEFT, padx=3)
         ttk.Label(search_frame,
-                  text="(Nháy đúp để xóa lịch đã chọn)",
+                  text="(Nháy đúp để xem chi tiết)",
                   foreground="gray").pack(side=tk.RIGHT)
 
         # Bảng dữ liệu
@@ -245,7 +246,7 @@ class FollowUpView(ttk.Frame):
         ttk.Button(action_frame, text="🗑 Xóa Lịch Đã Chọn",
                    command=self._fire_delete).pack(side=tk.RIGHT, padx=5)
 
-        self.tree.bind("<Double-1>", lambda e: self._fire_delete())
+        self.tree.bind("<Double-1>", lambda e: self._fire_double_click())
 
     # ------------------------------------------------------------------
     # Callback fires
@@ -267,6 +268,11 @@ class FollowUpView(ttk.Frame):
         self.entry_search.delete(0, tk.END)
         if self.on_clear_search:
             self.on_clear_search()
+
+    def _fire_double_click(self):
+        fid = self.get_selected_follow_up_id()
+        if fid is not None and self.on_double_click:
+            self.on_double_click(fid)
 
     def _fire_lookup_id(self):
         if self.on_lookup_id:
@@ -329,7 +335,7 @@ class FollowUpView(ttk.Frame):
         self.lbl_patient_name.config(text="")
         self.entry_date.delete(0, tk.END)
         self.text_reason.delete("1.0", tk.END)
-        self.combo_freq.current(1)
+        self.combo_freq.current(2)
 
     def refresh_list(self, rows: list[tuple]):
         """
@@ -362,6 +368,56 @@ class FollowUpView(ttk.Frame):
         self.lbl_sum_today.config(text=f"Hôm nay: {stats.get('today', 0)}")
         self.lbl_sum_overdue.config(text=f"Quá hạn: {stats.get('overdue', 0)}")
         self.lbl_sum_upcoming.config(text=f"Sắp tới: {stats.get('upcoming', 0)}")
+
+    def show_detail_popup(self, data: tuple, root):
+        """
+        Hiển thị popup chi tiết lịch tái khám.
+        data: (fu_id, patient_id, name, phone, appt_date, reason, frequency)
+        """
+        fu_id, pid, name, phone, appt_date, reason, freq = data
+
+        win = tk.Toplevel(root)
+        win.title(f"Chi Tiết Lịch Tái Khám - {name}")
+        win.geometry("460x420")
+        win.wait_visibility()
+        win.grab_set()
+
+        frame = ttk.Frame(win, padding=20)
+        frame.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(frame, text=f"Lịch Tái Khám #{fu_id}",
+                  font=("Arial", 14, "bold")).pack(anchor=tk.W, pady=(0, 15))
+
+        # Tính số ngày còn lại
+        try:
+            appt_date_obj = datetime.strptime(appt_date, "%Y-%m-%d").date()
+            days = (appt_date_obj - date.today()).days
+            status = _status_label(days)
+            days_text = _days_label(days)
+        except (ValueError, TypeError):
+            status = "—"
+            days_text = "—"
+
+        info = (
+            f"Bệnh nhân: {name}  (ID: {pid})\n"
+            f"Số điện thoại: {phone or '—'}\n\n"
+            f"Ngày tái khám: {appt_date}\n"
+            f"Trạng thái: {status}  ({days_text})\n"
+            f"Định kì: {freq or '—'}"
+        )
+        ttk.Label(frame, text=info, justify=tk.LEFT,
+                  font=("TkDefaultFont", 10)).pack(anchor=tk.W)
+
+        ttk.Label(frame, text="Lí do tái khám:",
+                  font=("TkDefaultFont", 10, "bold")).pack(
+            anchor=tk.W, pady=(15, 5))
+        reason_box = tk.Text(frame, width=45, height=8, wrap=tk.WORD,
+                             font=("TkDefaultFont", 10))
+        reason_box.insert("1.0", reason or "Không có ghi chú.")
+        reason_box.config(state=tk.DISABLED)
+        reason_box.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Button(frame, text="Đóng", command=win.destroy).pack(pady=(15, 0))
 
     def apply_theme(self, colors: dict):
         """ThemeManager gọi khi đổi theme."""

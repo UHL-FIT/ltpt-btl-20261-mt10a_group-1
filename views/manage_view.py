@@ -25,7 +25,8 @@ class ManageView(ttk.Frame):
         self.on_edit = None
         self.on_search = None
         self.on_clear_search = None
-        self.on_export_csv  = None
+        self.on_export_csv   = None
+        self.on_import_csv   = None
         self.on_double_click = None
         self.on_add_follow_up = None   # ← mới: chuyển sang tab lịch tái khám
         self.current_editing_id: int | None = None
@@ -108,6 +109,7 @@ class ManageView(ttk.Frame):
 
         ttk.Button(search_frame, text="Tìm",          command=self._fire_search).pack(side=tk.LEFT, padx=5)
         ttk.Button(search_frame, text="Xóa bộ lọc",   command=self._fire_clear_search).pack(side=tk.LEFT, padx=5)
+        ttk.Button(search_frame, text="Nhập từ CSV",   command=lambda: self.on_import_csv and self.on_import_csv()).pack(side=tk.LEFT, padx=5)
         ttk.Button(search_frame, text="Xuất ra CSV",   command=lambda: self.on_export_csv and self.on_export_csv()).pack(side=tk.LEFT, padx=5)
         ttk.Label(search_frame, text="(Nháy đúp để xem chi tiết)", foreground="gray").pack(side=tk.RIGHT)
 

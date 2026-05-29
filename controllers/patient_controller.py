@@ -9,6 +9,7 @@ Controller không biết SQL, không biết tkinter widget cụ thể.
 import csv
 import shutil
 import os
+import threading
 from datetime import datetime
 from tkinter import messagebox, filedialog
 
@@ -36,6 +37,41 @@ class PatientController:
         self.load_patients()  # Tải dữ liệu ban đầu khi khởi động
 
     # ------------------------------------------------------------------
+    # Async Threading Helper
+    # ------------------------------------------------------------------
+    def _run_async(self, task_func, on_success=None, on_error=None):
+        """
+        Chạy task_func trong thread nền để không đóng băng giao diện.
+        - task_func: hàm chạy nền (KHÔNG thao tác widget tkinter)
+        - on_success(result): gọi trên main thread khi thành công
+        - on_error(exception): gọi trên main thread khi lỗi
+        """
+        self.root.config(cursor="wait")
+        self.root.update_idletasks()
+
+        def _worker():
+            try:
+                result = task_func()
+                self.root.after(0, _on_done, result)
+            except Exception as e:
+                self.root.after(0, _on_fail, e)
+
+        def _on_done(result):
+            self.root.config(cursor="")
+            if on_success:
+                on_success(result)
+
+        def _on_fail(error):
+            self.root.config(cursor="")
+            if on_error:
+                on_error(error)
+            else:
+                messagebox.showerror("Lỗi", str(error))
+
+        thread = threading.Thread(target=_worker, daemon=True)
+        thread.start()
+
+    # ------------------------------------------------------------------
     # Kết nối callback: View gọi phương thức nào của Controller?
     # ------------------------------------------------------------------
     def _bind_events(self):
@@ -46,6 +82,7 @@ class PatientController:
         mv.on_search       = self.load_patients
         mv.on_clear_search = self.load_patients       # gọi không tham số → load tất cả
         mv.on_export_csv   = self.export_csv
+        mv.on_import_csv   = self.import_csv
         mv.on_double_click = self.show_detail
 
         sv = self.stats_view
@@ -57,6 +94,7 @@ class PatientController:
         fv.on_search       = self.load_follow_ups
         fv.on_clear_search = self.load_follow_ups
         fv.on_lookup_id    = self.lookup_patient_name
+        fv.on_double_click = self.show_follow_up_detail
 
     # Gioi thieu 
     def show_about(self):
@@ -73,43 +111,56 @@ class PatientController:
     # ------------------------------------------------------------------
     
     def export_database(self):
-        """Sao lưu file .db ra một nơi khác an toàn"""
+        """Sao lưu file .db ra một nơi khác an toàn (async)."""
         dest_path = filedialog.asksaveasfilename(
             defaultextension=".db",
             filetypes=[("SQLite Database", "*.db")],
             title="Lưu bản sao lưu Database",
             initialfile=f"backup_patients_{datetime.now().strftime('%Y%m%d')}.db"
         )
-        if dest_path:
-            try:
-                # Copy file từ model.db_name sang đường dẫn mới
-                shutil.copy2(self.model.db_name, dest_path)
-                messagebox.showinfo("Thành công", f"Đã sao lưu Database ra:\n{dest_path}")
-            except Exception as e:
-                messagebox.showerror("Lỗi sao lưu", f"Không thể xuất DB: {e}")
+        if not dest_path:
+            return
+
+        def task():
+            shutil.copy2(self.model.db_name, dest_path)
+            return dest_path
+
+        def on_success(path):
+            messagebox.showinfo("Thành công", f"Đã sao lưu Database ra:\n{path}")
+
+        self._run_async(task, on_success,
+                        lambda e: messagebox.showerror("Lỗi sao lưu",
+                                                       f"Không thể xuất DB: {e}"))
 
     def import_database(self):
-        """Phục hồi dữ liệu từ file .db khác"""
+        """Phục hồi dữ liệu từ file .db khác (async)."""
         src_path = filedialog.askopenfilename(
             filetypes=[("SQLite Database", "*.db")],
             title="Chọn file Database để phục hồi"
         )
-        if src_path:
-            confirm = messagebox.askyesno(
-                "Cảnh báo nguy hiểm", 
-                "Việc nhập Database sẽ GHI ĐÈ và XÓA TOÀN BỘ dữ liệu hiện tại.\nBạn có chắc chắn muốn tiếp tục?"
-            )
-            if confirm:
-                try:
-                    # Ghi đè file DB cũ bằng file mới
-                    shutil.copy2(src_path, self.model.db_name)
-                    self.load_patients() # Tải lại danh sách
-                    self.load_follow_ups()
-                    if self.stats_view.winfo_ismapped():
-                        self.load_statistics() # Tải lại thống kê nếu đang mở
-                    messagebox.showinfo("Thành công", "Đã phục hồi Database thành công!")
-                except Exception as e:
-                    messagebox.showerror("Lỗi phục hồi", f"Không thể nhập DB: {e}")            
+        if not src_path:
+            return
+        confirm = messagebox.askyesno(
+            "Cảnh báo nguy hiểm",
+            "Việc nhập Database sẽ GHI ĐÈ và XÓA TOÀN BỘ dữ liệu hiện tại.\n"
+            "Bạn có chắc chắn muốn tiếp tục?"
+        )
+        if not confirm:
+            return
+
+        def task():
+            shutil.copy2(src_path, self.model.db_name)
+
+        def on_success(_):
+            self.load_patients()
+            self.load_follow_ups()
+            if self.stats_view.winfo_ismapped():
+                self.load_statistics()
+            messagebox.showinfo("Thành công", "Đã phục hồi Database thành công!")
+
+        self._run_async(task, on_success,
+                        lambda e: messagebox.showerror("Lỗi phục hồi",
+                                                       f"Không thể nhập DB: {e}"))
     
     def load_patients(self, query: str = ""):
         rows = self.model.search_patients(query)
@@ -200,6 +251,7 @@ class PatientController:
             self.manage_view.show_detail_popup(patient, self.root)
 
     def export_csv(self):
+        """Xuất danh sách bệnh nhân ra CSV (async)."""
         file_path = filedialog.asksaveasfilename(
             defaultextension=".csv",
             filetypes=[("CSV files", "*.csv")],
@@ -207,7 +259,8 @@ class PatientController:
         )
         if not file_path:
             return
-        try:
+
+        def task():
             rows = self.model.export_all()
             with open(file_path, mode='w', newline='', encoding='utf-8-sig') as f:
                 writer = csv.writer(f)
@@ -215,20 +268,82 @@ class PatientController:
                                   "Thời gian nhận", "Bệnh chính", "Lịch sử khám",
                                   "Chiều cao (cm)", "Cân nặng (kg)"])
                 writer.writerows(rows)
-            messagebox.showinfo("Thành công", f"Đã xuất file:\n{file_path}")
-        except Exception as e:
-            messagebox.showerror("Lỗi Xuất File", str(e))
+            return file_path
+
+        def on_success(path):
+            messagebox.showinfo("Thành công", f"Đã xuất file:\n{path}")
+
+        self._run_async(task, on_success,
+                        lambda e: messagebox.showerror("Lỗi Xuất File", str(e)))
+
+    def import_csv(self):
+        """Nhập danh sách bệnh nhân từ file CSV (async)."""
+        file_path = filedialog.askopenfilename(
+            filetypes=[("CSV files", "*.csv")],
+            title="Chọn file CSV để nhập danh sách bệnh nhân"
+        )
+        if not file_path:
+            return
+
+        def task():
+            with open(file_path, mode='r', encoding='utf-8-sig') as f:
+                reader = csv.reader(f)
+                header = next(reader, None)  # Bỏ qua dòng tiêu đề
+                count = 0
+                for row in reader:
+                    if len(row) < 6:
+                        continue
+                    name            = row[0].strip()
+                    age             = row[1].strip()
+                    gender          = row[2].strip()
+                    phone           = row[3].strip() if len(row) > 3 else ""
+                    receive_time    = row[4].strip() if len(row) > 4 else ""
+                    primary_disease = row[5].strip() if len(row) > 5 else ""
+                    history         = row[6].strip() if len(row) > 6 else ""
+                    height = None
+                    weight = None
+                    try:
+                        if len(row) > 7 and row[7].strip():
+                            height = float(row[7].strip())
+                    except ValueError:
+                        pass
+                    try:
+                        if len(row) > 8 and row[8].strip():
+                            weight = float(row[8].strip())
+                    except ValueError:
+                        pass
+
+                    if name and age:
+                        data = (name, age, gender, phone, receive_time,
+                                primary_disease, history, height, weight)
+                        self.model.add_patient(data)
+                        count += 1
+            return count
+
+        def on_success(count):
+            self.load_patients()
+            messagebox.showinfo("Thành công",
+                                f"Đã nhập {count} hồ sơ bệnh nhân từ CSV.")
+
+        self._run_async(task, on_success,
+                        lambda e: messagebox.showerror("Lỗi Nhập File", str(e)))
 
     # ------------------------------------------------------------------
     # Xử lý nghiệp vụ – Thống kê
     # ------------------------------------------------------------------
     def load_statistics(self):
+        """Tải dữ liệu thống kê (async – query nặng + vẽ biểu đồ)."""
         today_str = datetime.now().strftime("%Y-%m-%d")
-        try:
-            stats = self.model.get_statistics(today_str)
+
+        def task():
+            return self.model.get_statistics(today_str)
+
+        def on_success(stats):
             self.stats_view.update(stats)
-        except Exception as e:
-            messagebox.showerror("Lỗi", f"Lỗi tải thống kê: {e}")
+
+        self._run_async(task, on_success,
+                        lambda e: messagebox.showerror("Lỗi",
+                                                       f"Lỗi tải thống kê: {e}"))
 
 
     # ------------------------------------------------------------------
@@ -244,6 +359,12 @@ class PatientController:
             self.follow_up_view.update_summary(stats)
         except Exception as e:
             messagebox.showerror("Lỗi", f"Lỗi tải lịch tái khám: {e}")
+
+    def show_follow_up_detail(self, follow_up_id: int):
+        """Hiển thị popup chi tiết lịch tái khám."""
+        data = self.model.get_follow_up_by_id(follow_up_id)
+        if data:
+            self.follow_up_view.show_detail_popup(data, self.root)
  
     def save_follow_up(self, data: dict):
         """Validate và lưu lịch tái khám mới."""
