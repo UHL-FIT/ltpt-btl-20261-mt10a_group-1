@@ -11,9 +11,15 @@ from utils.helpers import remove_accents
 
 class PatientModel:
     def __init__(self):
-        # Luôn lưu DB cùng thư mục với file model này
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        self.db_path = os.path.join(base_dir, "..", "patients_data.db")
+        import sys
+        # Nếu chạy dạng file đóng gói (executable), lưu DB cùng thư mục với file .exe
+        if getattr(sys, 'frozen', False):
+            base_dir = os.path.dirname(sys.executable)
+            self.db_path = os.path.join(base_dir, "patients_data.db")
+        else:
+            # Nếu chạy dạng script python, lưu DB ở thư mục gốc của project
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            self.db_path = os.path.join(base_dir, "..", "patients_data.db")
         self.db_name = self.db_path            
         self._init_database()
 
