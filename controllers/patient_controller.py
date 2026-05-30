@@ -46,7 +46,14 @@ class PatientController:
         - on_success(result): gọi trên main thread khi thành công
         - on_error(exception): gọi trên main thread khi lỗi
         """
-        self.root.config(cursor="wait")
+        # Đặt con trỏ chờ an toàn, tương thích cả Windows và Linux/X11
+        try:
+            self.root.config(cursor="watch")
+        except Exception:
+            try:
+                self.root.config(cursor="wait")
+            except Exception:
+                pass
         self.root.update_idletasks()
 
         def _worker():
