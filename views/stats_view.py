@@ -305,6 +305,9 @@ class StatsView(ttk.Frame):
         # Rút gọn nhãn: chỉ giữ MM/YY
         short_labels = []
         for m in months:
+            if not m or not isinstance(m, str):
+                short_labels.append("K.Xác Định")
+                continue
             parts = m.split('-')
             short_labels.append(f"{parts[1]}/{parts[0][2:]}") if len(parts) == 2 else short_labels.append(m)
 

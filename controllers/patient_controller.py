@@ -122,7 +122,14 @@ class PatientController:
             return
 
         def task():
-            shutil.copy2(self.model.db_name, dest_path)
+            import sqlite3
+            src_conn = sqlite3.connect(self.model.db_name)
+            dest_conn = sqlite3.connect(dest_path)
+            try:
+                src_conn.backup(dest_conn)
+            finally:
+                dest_conn.close()
+                src_conn.close()
             return dest_path
 
         def on_success(path):
@@ -149,7 +156,14 @@ class PatientController:
             return
 
         def task():
-            shutil.copy2(src_path, self.model.db_name)
+            import sqlite3
+            src_conn = sqlite3.connect(src_path)
+            dest_conn = sqlite3.connect(self.model.db_name)
+            try:
+                src_conn.backup(dest_conn)
+            finally:
+                dest_conn.close()
+                src_conn.close()
 
         def on_success(_):
             self.load_patients()

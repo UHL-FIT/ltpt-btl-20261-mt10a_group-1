@@ -6,10 +6,18 @@ Nhiệm vụ: CRUD bệnh nhân + truy vấn thống kê.
 import sqlite3
 import os
 from datetime import datetime, date
+from contextlib import contextmanager
 from utils.helpers import remove_accents
 
 
 class PatientModel:
+    @contextmanager
+    def _db_conn(self):
+        conn = sqlite3.connect(self.db_path)
+        try:
+            yield conn
+        finally:
+            conn.close()
     def __init__(self):
         import sys
         # Nếu chạy dạng file đóng gói (executable), lưu DB cùng thư mục với file .exe
@@ -27,7 +35,7 @@ class PatientModel:
     # Khởi tạo
     # ------------------------------------------------------------------
     def _init_database(self):
-        with sqlite3.connect(self.db_path) as conn:
+        with self._db_conn() as conn:
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS patients (
                     id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,7 +73,7 @@ class PatientModel:
     # ------------------------------------------------------------------
     def add_patient(self, data: tuple) -> None:
         """Thêm một bệnh nhân mới. data là tuple chứa các trường."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._db_conn() as conn:
             conn.execute('''
                 INSERT INTO patients
                     (name, age, gender, phone, receive_time,
@@ -75,14 +83,14 @@ class PatientModel:
             conn.commit()
 
     def delete_patient(self, patient_id: int) -> None:
-        with sqlite3.connect(self.db_path) as conn:
+        with self._db_conn() as conn:
             conn.execute("PRAGMA foreign_keys = ON")            
             conn.execute("DELETE FROM patients WHERE id = ?", (patient_id,))
             conn.commit()
 
     def update_patient(self, patient_id: int, data: tuple) -> None:
         """Hàm dùng để cập nhật thông tin bệnh nhân (Tính năng Sửa)"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._db_conn() as conn:
             # data là tuple: (name, age, gender, phone, receive_time, primary_disease, history, height, weight, patient_id)
             conn.execute('''
                 UPDATE patients 
@@ -93,13 +101,13 @@ class PatientModel:
             conn.commit()
 
     def get_patient_by_id(self, patient_id: int) -> tuple | None:
-        with sqlite3.connect(self.db_path) as conn:
+        with self._db_conn() as conn:
             cursor = conn.execute("SELECT * FROM patients WHERE id = ?", (patient_id,))
             return cursor.fetchone()
 
     def search_patients(self, query: str = "") -> list[tuple]:
         """Trả về danh sách bệnh nhân, lọc theo tên/SĐT nếu có query."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._db_conn() as conn:
             conn.create_function("REMOVE_ACCENTS", 1, remove_accents)
             if query.strip():
                 clean = remove_accents(query.strip())
@@ -118,7 +126,7 @@ class PatientModel:
 
     def export_all(self) -> list[tuple]:
         """Trả về toàn bộ dữ liệu (bỏ id) để xuất CSV."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._db_conn() as conn:
             return conn.execute('''
                 SELECT name, age, gender, phone, receive_time,
                        primary_disease, history, height, weight
@@ -133,7 +141,7 @@ class PatientModel:
         Trả về dict chứa toàn bộ số liệu thống kê.
         today_str: chuỗi ngày dạng 'YYYY-MM-DD'
         """
-        with sqlite3.connect(self.db_path) as conn:
+        with self._db_conn() as conn:
             total = conn.execute("SELECT COUNT(*) FROM patients").fetchone()[0]
 
             today = conn.execute(
@@ -176,7 +184,7 @@ class PatientModel:
             else:
                 bmi_categories["Béo phì"] += 1
 
-        with sqlite3.connect(self.db_path) as conn2:
+        with self._db_conn() as conn2:
             monthly_patients = conn2.execute('''
                 SELECT strftime('%Y-%m', receive_time) AS month, COUNT(*) AS cnt
                 FROM patients
@@ -232,7 +240,7 @@ class PatientModel:
     def add_follow_up(self, patient_id: int, appointment_date: str,
                       reason: str, frequency: str) -> None:
         """Thêm lịch tái khám mới."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._db_conn() as conn:
             conn.execute('''
                 INSERT INTO follow_up_appointments
                     (patient_id, appointment_date, reason, frequency)
@@ -241,7 +249,7 @@ class PatientModel:
             conn.commit()
  
     def delete_follow_up(self, follow_up_id: int) -> None:
-        with sqlite3.connect(self.db_path) as conn:
+        with self._db_conn() as conn:
             conn.execute("DELETE FROM follow_up_appointments WHERE id = ?", (follow_up_id,))
             conn.commit()
  
@@ -251,7 +259,7 @@ class PatientModel:
         Mỗi row: (fu_id, patient_id, name, phone, appointment_date,
                   reason, frequency, days_remaining)
         """
-        with sqlite3.connect(self.db_path) as conn:
+        with self._db_conn() as conn:
             conn.create_function("REMOVE_ACCENTS", 1, remove_accents)
             if search.strip():
                 clean = remove_accents(search.strip())
@@ -288,7 +296,7 @@ class PatientModel:
  
     def get_patient_name_by_id(self, patient_id: int) -> str | None:
         """Tra cứu nhanh tên bệnh nhân theo ID."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._db_conn() as conn:
             row = conn.execute(
                 "SELECT name FROM patients WHERE id = ?", (patient_id,)
             ).fetchone()
@@ -296,7 +304,7 @@ class PatientModel:
 
     def get_follow_up_by_id(self, follow_up_id: int) -> tuple | None:
         """Lấy chi tiết một lịch tái khám theo ID (join với patients)."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._db_conn() as conn:
             row = conn.execute('''
                 SELECT f.id, f.patient_id, p.name, p.phone,
                        f.appointment_date, f.reason, f.frequency
@@ -309,7 +317,7 @@ class PatientModel:
     def get_follow_up_stats(self) -> dict:
         """Thống kê tóm tắt cho dashboard lịch tái khám."""
         today_str = date.today().isoformat()
-        with sqlite3.connect(self.db_path) as conn:
+        with self._db_conn() as conn:
             total = conn.execute(
                 "SELECT COUNT(*) FROM follow_up_appointments"
             ).fetchone()[0]
