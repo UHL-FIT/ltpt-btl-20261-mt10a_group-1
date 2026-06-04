@@ -54,7 +54,6 @@ class PatientController:
                 self.root.config(cursor="wait")
             except Exception:
                 pass
-        self.root.update_idletasks()
 
         def _worker():
             try:
@@ -184,8 +183,16 @@ class PatientController:
                                                        f"Không thể nhập DB: {e}"))
     
     def load_patients(self, query: str = ""):
-        rows = self.model.search_patients(query)
-        self.manage_view.refresh_list(rows)
+        """Tải danh sách bệnh nhân (async để không đóng băng giao diện)."""
+        def task():
+            return self.model.search_patients(query)
+
+        def on_success(rows):
+            self.manage_view.refresh_list(rows)
+
+        self._run_async(task, on_success,
+                        lambda e: messagebox.showerror("Lỗi",
+                                                       f"Lỗi tải danh sách: {e}"))
 
     def prepare_edit_patient(self):
         """Lấy dữ liệu người đang chọn và đẩy lên Form để bác sĩ sửa"""
@@ -371,15 +378,20 @@ class PatientController:
     # Lịch Tái Khám
     # ------------------------------------------------------------------
     def load_follow_ups(self, search: str = ""):
-        """Tải danh sách lịch tái khám và cập nhật tóm tắt."""
-        try:
+        """Tải danh sách lịch tái khám (async để không đóng băng giao diện)."""
+        def task():
             rows = self.model.get_follow_ups(search)
-            self.follow_up_view.refresh_list(rows)
- 
             stats = self.model.get_follow_up_stats()
+            return rows, stats
+
+        def on_success(result):
+            rows, stats = result
+            self.follow_up_view.refresh_list(rows)
             self.follow_up_view.update_summary(stats)
-        except Exception as e:
-            messagebox.showerror("Lỗi", f"Lỗi tải lịch tái khám: {e}")
+
+        self._run_async(task, on_success,
+                        lambda e: messagebox.showerror("Lỗi",
+                                                       f"Lỗi tải lịch tái khám: {e}"))
 
     def show_follow_up_detail(self, follow_up_id: int):
         """Hiển thị popup chi tiết lịch tái khám."""

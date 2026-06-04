@@ -188,15 +188,14 @@ class ManageView(ttk.Frame):
             self.on_add_follow_up(pid)
 
     def refresh_list(self, rows: list[tuple]):
-        """Cập nhật danh sách bệnh nhân trên bảng (Treeview)"""
-        for item in self.tree.get_children():
-            self.tree.delete(item)
+        """Cập nhật danh sách bệnh nhân trên bảng (Treeview) – tối ưu batch."""
+        children = self.tree.get_children()
+        if children:
+            self.tree.delete(*children)
 
         for row in rows:
-            # row: (id, name, age, gender, receive_time, primary_disease, secondary_disease)
             patient_id = row[0]
-            display_values = (patient_id,) + row[1:]  # Hiển thị cả ID ở cột đầu
-
+            display_values = (patient_id,) + row[1:]
             self.tree.insert("", tk.END, iid=patient_id, values=display_values)
 
     def fill_form_for_edit(self, patient_id: int, patient_data: tuple):

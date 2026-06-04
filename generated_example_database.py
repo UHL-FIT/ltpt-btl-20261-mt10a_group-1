@@ -308,7 +308,7 @@ def main():
                 print("  ❌ Vui lòng nhập một số nguyên dương.")
 
     # Tên file output
-    default_name = f"patients_data_{num_patients}.db"
+    default_name = "patients_data.db"
     print(f"\n  Tên file mặc định: {default_name}")
     custom = input("  Nhấn Enter để dùng tên mặc định hoặc nhập tên khác: ").strip()
     output_path = custom if custom else default_name

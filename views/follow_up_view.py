@@ -343,8 +343,9 @@ class FollowUpView(ttk.Frame):
               (fu_id, patient_id, name, phone, appt_date,
                reason, frequency, days_remaining)
         """
-        for item in self.tree.get_children():
-            self.tree.delete(item)
+        children = self.tree.get_children()
+        if children:
+            self.tree.delete(*children)
 
         for row in rows:
             fu_id, pid, name, phone, appt_date, reason, freq, days = row

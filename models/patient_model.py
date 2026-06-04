@@ -65,7 +65,14 @@ class PatientModel:
                     frequency        TEXT,
                     FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
                 )
-            ''')            
+            ''')
+            # Indexes để tăng tốc truy vấn
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_patients_name ON patients(name)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_patients_phone ON patients(phone)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_patients_receive_time ON patients(receive_time)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_patients_primary_disease ON patients(primary_disease)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_followup_patient_id ON follow_up_appointments(patient_id)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_followup_appt_date ON follow_up_appointments(appointment_date)')
             conn.commit()
 
     # ------------------------------------------------------------------

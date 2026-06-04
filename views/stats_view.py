@@ -130,7 +130,10 @@ class StatsView(ttk.Frame):
             (0, 0), window=self.chart_frame, anchor="nw")
 
         self.chart_frame.bind("<Configure>", self._on_chart_frame_configure)
-        self._scroll_canvas.bind("<Configure>", self._on_canvas_configure)
+        self._scroll_canvas.bind("<Configure>", self._on_canvas_configure_debounced)
+
+        # Debounce timer cho Configure event
+        self._configure_after_id = None
 
         # Mouse wheel scroll
         self._scroll_canvas.bind("<Enter>",  self._bind_mousewheel)
@@ -139,6 +142,13 @@ class StatsView(ttk.Frame):
     def _on_chart_frame_configure(self, event):
         self._scroll_canvas.configure(
             scrollregion=self._scroll_canvas.bbox("all"))
+
+    def _on_canvas_configure_debounced(self, event):
+        """Debounce Configure event – chỉ xử lý sau khi ngừng resize 150ms."""
+        if self._configure_after_id:
+            self._scroll_canvas.after_cancel(self._configure_after_id)
+        self._configure_after_id = self._scroll_canvas.after(
+            150, lambda: self._on_canvas_configure(event))
 
     def _on_canvas_configure(self, event):
         self._scroll_canvas.itemconfig(self._scroll_window, width=event.width)

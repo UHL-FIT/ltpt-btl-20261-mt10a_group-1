@@ -2,6 +2,20 @@
 ENTRY POINT – main.py
 Nhiệm vụ DUY NHẤT: lắp ráp (wire up) Model, View, Controller rồi chạy.
 """
+# ── Khắc phục lag khi kéo cửa sổ trên Windows (DPI Awareness) ──────────
+# Phải gọi TRƯỚC khi tạo Tk root, nếu không Windows sẽ bitmap-scale
+# toàn bộ cửa sổ gây giật lag nghiêm trọng khi kéo/resize.
+import ctypes
+import platform
+if platform.system() == "Windows":
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)   # System DPI aware
+    except Exception:
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
+
 import tkinter as tk
 from tkinter import ttk
 
@@ -23,6 +37,8 @@ def main():
     root.title("Hệ Thống Quản Lý Hồ Sơ Bệnh Nhân")
     root.geometry("1500x700")
     root.minsize(1100, 600)
+
+
 
     style = ttk.Style()
     theme_manager = ThemeManager(root, style)
