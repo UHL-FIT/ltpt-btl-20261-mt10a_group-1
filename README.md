@@ -80,6 +80,7 @@ Dự án tuân theo mô hình **MVC (Model – View – Controller)** rõ ràng:
 ltpt-btl-20261-mt10a_group-1/
 ├── main.py                      # Entry point – lắp ráp MVC rồi chạy
 ├── pyproject.toml               # Cấu hình project & dependencies (uv)
+├── requirements.txt             # Dependencies cho pip (pip install -r)
 ├── uv.lock                      # Lock file cho uv
 ├── .python-version              # Python 3.14
 ├── .gitignore
@@ -124,6 +125,7 @@ ltpt-btl-20261-mt10a_group-1/
 | `matplotlib` | ≥ 3.10.9 | Vẽ biểu đồ thống kê |
 | `numpy` | ≥ 2.4.5 | Hỗ trợ tính toán cho Matplotlib |
 | `pandas` | ≥ 3.0.3 | Xử lý dữ liệu |
+| `faker` | ≥ 40.19.1 | Tạo dữ liệu mẫu (demo) |
 
 ---
 
@@ -162,7 +164,7 @@ python -m venv .venv
 source .venv/bin/activate
 
 # 3. Cài đặt dependencies
-pip install matplotlib numpy pandas
+pip install -r requirements.txt
 
 # 4. Chạy ứng dụng
 python main.py
