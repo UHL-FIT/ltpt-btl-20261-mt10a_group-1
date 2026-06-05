@@ -193,7 +193,7 @@ class FollowUpView(ttk.Frame):
 
         self._lbl_stats_fu = ttk.Label(
             action_frame,
-            text="Sĩ số: 0 (Nam: 0, Nữ: 0)  |  Trung bình tuổi: —  |  Tỉ lệ tái khám: —",
+            text="Tổng số bệnh nhân: 0 (Nam: 0, Nữ: 0)  |  Trung bình tuổi: —  |  Tỉ lệ tái khám: —",
             font=("TkDefaultFont", 9),
             anchor=tk.W
         )
@@ -388,7 +388,7 @@ class FollowUpView(ttk.Frame):
         followup_rate = stats.get('followup_rate', 0)
 
         text = (
-            f"Sĩ số: {total} (Nam: {male}, Nữ: {female})  |  "
+            f"Tổng số bệnh nhân: {total} (Nam: {male}, Nữ: {female})  |  "
             f"Trung bình tuổi: {avg_age}  |  "
             f"Tỉ lệ tái khám: {followup_rate}%"
         )

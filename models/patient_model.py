@@ -394,7 +394,7 @@ class PatientModel:
 
     def get_patient_summary_stats(self) -> dict:
         """
-        Thống kê tổng hợp bệnh nhân: sĩ số (nam/nữ), trung bình tuổi, tỉ lệ tái khám.
+        Thống kê tổng hợp bệnh nhân: Tổng số bệnh nhân (nam/nữ), trung bình tuổi, tỉ lệ tái khám.
         """
         with self._db_conn() as conn:
             total = conn.execute("SELECT COUNT(*) FROM patients").fetchone()[0]
