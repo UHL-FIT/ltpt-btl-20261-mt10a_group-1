@@ -226,7 +226,7 @@ class ManageView(ttk.Frame):
         followup_rate = stats.get('followup_rate', 0)
 
         text = (
-            f"Sĩ số: {total} (Nam: {male}, Nữ: {female})  |  "
+            f"Tổng số bệnh nhân: {total} (Nam: {male}, Nữ: {female})  |  "
             f"Trung bình tuổi: {avg_age}  |  "
             f"Tỉ lệ tái khám: {followup_rate}%"
         )
