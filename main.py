@@ -34,7 +34,7 @@ from utils.theme_manager             import ThemeManager, MODE_LABELS
 
 def main():
     root = tk.Tk()
-    root.title("Hệ Thống Quản Lý Hồ Sơ Bệnh Nhân")
+    root.title("Hệ Thống Quản Lý Hồ Sơ Bệnh Nhân v0.4-alpha")
     root.geometry("1500x700")
     root.minsize(1100, 600)
 

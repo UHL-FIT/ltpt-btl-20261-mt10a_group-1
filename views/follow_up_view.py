@@ -187,6 +187,21 @@ class FollowUpView(ttk.Frame):
                   text="(Nháy đúp để xem chi tiết)",
                   foreground="gray").pack(side=tk.RIGHT)
 
+        # Nút hành động và thanh thông tin tổng hợp (dưới cùng)
+        action_frame = ttk.Frame(parent)
+        action_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0))
+
+        self._lbl_stats_fu = ttk.Label(
+            action_frame,
+            text="Sĩ số: 0 (Nam: 0, Nữ: 0)  |  Trung bình tuổi: —  |  Tỉ lệ tái khám: —",
+            font=("TkDefaultFont", 9),
+            anchor=tk.W
+        )
+        self._lbl_stats_fu.pack(side=tk.LEFT, padx=5)
+
+        ttk.Button(action_frame, text="🗑 Xóa Lịch Đã Chọn",
+                   command=self._fire_delete).pack(side=tk.RIGHT, padx=5)
+
         # Bảng dữ liệu
         tree_frame = ttk.Frame(parent)
         tree_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
@@ -239,12 +254,6 @@ class FollowUpView(ttk.Frame):
 
         # Màu tag mặc định
         self._apply_tree_tags(dark=False)
-
-        # Nút xóa
-        action_frame = ttk.Frame(parent)
-        action_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0))
-        ttk.Button(action_frame, text="🗑 Xóa Lịch Đã Chọn",
-                   command=self._fire_delete).pack(side=tk.RIGHT, padx=5)
 
         self.tree.bind("<Double-1>", lambda e: self._fire_double_click())
 
@@ -369,6 +378,21 @@ class FollowUpView(ttk.Frame):
         self.lbl_sum_today.config(text=f"Hôm nay: {stats.get('today', 0)}")
         self.lbl_sum_overdue.config(text=f"Quá hạn: {stats.get('overdue', 0)}")
         self.lbl_sum_upcoming.config(text=f"Sắp tới: {stats.get('upcoming', 0)}")
+
+    def update_summary_stats(self, stats: dict):
+        """Cập nhật thanh thông tin tổng hợp bên dưới danh sách."""
+        total = stats.get('total', 0)
+        male  = stats.get('male', 0)
+        female = stats.get('female', 0)
+        avg_age = stats.get('avg_age', 0)
+        followup_rate = stats.get('followup_rate', 0)
+
+        text = (
+            f"Sĩ số: {total} (Nam: {male}, Nữ: {female})  |  "
+            f"Trung bình tuổi: {avg_age}  |  "
+            f"Tỉ lệ tái khám: {followup_rate}%"
+        )
+        self._lbl_stats_fu.config(text=text)
 
     def show_detail_popup(self, data: tuple, root):
         """

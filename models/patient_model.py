@@ -87,6 +87,31 @@ class PatientModel:
                      primary_disease, history, height, weight)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', data)
+    def add_patients_batch(self, batch: list[tuple]) -> None:
+        """Thêm nhiều bệnh nhân cùng lúc kèm theo lịch tái khám. batch = [(patient_data, fu_str), ...]"""
+        with self._db_conn() as conn:
+            for patient_data, fu_str in batch:
+                cursor = conn.execute('''
+                    INSERT INTO patients
+                        (name, age, gender, phone, receive_time,
+                         primary_disease, history, height, weight)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', patient_data)
+                
+                if fu_str:
+                    patient_id = cursor.lastrowid
+                    fu_items = fu_str.split(";")
+                    fu_batch = []
+                    for item in fu_items:
+                        parts = item.split("|")
+                        if len(parts) >= 3:
+                            fu_batch.append((patient_id, parts[0], parts[1], parts[2]))
+                    if fu_batch:
+                        conn.executemany('''
+                            INSERT INTO follow_up_appointments
+                                (patient_id, appointment_date, reason, frequency)
+                            VALUES (?, ?, ?, ?)
+                        ''', fu_batch)
             conn.commit()
 
     def delete_patient(self, patient_id: int) -> None:
@@ -122,23 +147,43 @@ class PatientModel:
                     SELECT id, name, age, gender, receive_time, primary_disease, height, weight
                     FROM patients
                     WHERE REMOVE_ACCENTS(name) LIKE ? OR phone LIKE ?
-                    ORDER BY id DESC
+                    ORDER BY id DESC LIMIT 1000
                 ''', (f"%{clean}%", f"%{query.strip()}%")).fetchall()
             else:
                 rows = conn.execute('''
                     SELECT id, name, age, gender, receive_time, primary_disease, height, weight
-                    FROM patients ORDER BY id DESC
+                    FROM patients ORDER BY id DESC LIMIT 1000
                 ''').fetchall()
         return rows
 
     def export_all(self) -> list[tuple]:
-        """Trả về toàn bộ dữ liệu (bỏ id) để xuất CSV."""
+        """Trả về toàn bộ dữ liệu (bỏ id) kèm theo lịch tái khám để xuất CSV."""
         with self._db_conn() as conn:
-            return conn.execute('''
-                SELECT name, age, gender, phone, receive_time,
+            patients = conn.execute('''
+                SELECT id, name, age, gender, phone, receive_time,
                        primary_disease, history, height, weight
                 FROM patients ORDER BY id DESC
             ''').fetchall()
+
+            followups = conn.execute('''
+                SELECT patient_id, appointment_date, reason, frequency
+                FROM follow_up_appointments
+            ''').fetchall()
+
+            from collections import defaultdict
+            fu_dict = defaultdict(list)
+            for fu in followups:
+                pid, date, reason, freq = fu
+                safe_reason = str(reason).replace("|", ",").replace(";", ",") if reason else ""
+                safe_freq = str(freq).replace("|", ",").replace(";", ",") if freq else ""
+                fu_dict[pid].append(f"{date}|{safe_reason}|{safe_freq}")
+
+            result = []
+            for p in patients:
+                pid = p[0]
+                fu_str = ";".join(fu_dict[pid]) if pid in fu_dict else ""
+                result.append(p[1:] + (fu_str,))
+            return result
 
     # ------------------------------------------------------------------
     # Thống kê
@@ -278,7 +323,7 @@ class PatientModel:
                     WHERE REMOVE_ACCENTS(p.name) LIKE ?
                        OR p.phone LIKE ?
                        OR CAST(f.patient_id AS TEXT) LIKE ?
-                    ORDER BY f.appointment_date ASC
+                    ORDER BY f.appointment_date ASC LIMIT 1000
                 ''', (f"%{clean}%", f"%{search.strip()}%",
                       f"%{search.strip()}%")).fetchall()
             else:
@@ -287,7 +332,7 @@ class PatientModel:
                            f.appointment_date, f.reason, f.frequency
                     FROM follow_up_appointments f
                     JOIN patients p ON p.id = f.patient_id
-                    ORDER BY f.appointment_date ASC
+                    ORDER BY f.appointment_date ASC LIMIT 1000
                 ''').fetchall()
  
         today = date.today()
@@ -345,4 +390,37 @@ class PatientModel:
             "today": today_count,
             "overdue": overdue,
             "upcoming": upcoming,
+        }
+
+    def get_patient_summary_stats(self) -> dict:
+        """
+        Thống kê tổng hợp bệnh nhân: sĩ số (nam/nữ), trung bình tuổi, tỉ lệ tái khám.
+        """
+        with self._db_conn() as conn:
+            total = conn.execute("SELECT COUNT(*) FROM patients").fetchone()[0]
+            male = conn.execute(
+                "SELECT COUNT(*) FROM patients WHERE gender = 'Nam'"
+            ).fetchone()[0]
+            female = conn.execute(
+                "SELECT COUNT(*) FROM patients WHERE gender = 'Nữ'"
+            ).fetchone()[0]
+            avg_age_row = conn.execute(
+                "SELECT AVG(CAST(age AS REAL)) FROM patients WHERE age IS NOT NULL AND age != ''"
+            ).fetchone()
+            avg_age = round(avg_age_row[0], 1) if avg_age_row[0] is not None else 0
+
+            # Số bệnh nhân có ít nhất 1 lịch tái khám
+            patients_with_followup = conn.execute('''
+                SELECT COUNT(DISTINCT patient_id) FROM follow_up_appointments
+            ''').fetchone()[0]
+
+        followup_rate = round(patients_with_followup / total * 100, 1) if total > 0 else 0
+
+        return {
+            "total": total,
+            "male": male,
+            "female": female,
+            "avg_age": avg_age,
+            "followup_rate": followup_rate,
+            "patients_with_followup": patients_with_followup,
         }

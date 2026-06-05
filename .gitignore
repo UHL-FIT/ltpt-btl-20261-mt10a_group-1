@@ -10,6 +10,8 @@ dist/
 .venv/
 .idea/
 .vscode/
+venv/
+./patients_data.db
 
 # UV lock (optional: bỏ dòng này nếu muốn commit uv.lock)
 # uv.lock

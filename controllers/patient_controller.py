@@ -11,7 +11,8 @@ import shutil
 import os
 import threading
 from datetime import datetime
-from tkinter import messagebox, filedialog
+import tkinter as tk
+from tkinter import messagebox, filedialog, ttk
 
 from models.patient_model import PatientModel
 from views.manage_view    import ManageView
@@ -39,43 +40,67 @@ class PatientController:
     # ------------------------------------------------------------------
     # Async Threading Helper
     # ------------------------------------------------------------------
-    def _run_async(self, task_func, on_success=None, on_error=None):
-        """
-        Chạy task_func trong thread nền để không đóng băng giao diện.
-        - task_func: hàm chạy nền (KHÔNG thao tác widget tkinter)
-        - on_success(result): gọi trên main thread khi thành công
-        - on_error(exception): gọi trên main thread khi lỗi
-        """
-        # Đặt con trỏ chờ an toàn, tương thích cả Windows và Linux/X11
-        try:
-            self.root.config(cursor="watch")
-        except Exception:
-            try:
-                self.root.config(cursor="wait")
-            except Exception:
-                pass
+    def _run_async(self, task_func, on_success=None, on_error=None, show_loading=True):
+        """Chạy tác vụ ở thread nền (tránh treo GUI). Nếu mất hơn 300ms sẽ tự hiện màn hình chờ."""
+        result_container = []
+        error_container = []
+        task_done = [False]
+        loading_popup = [None]
 
-        def _worker():
+        def worker():
             try:
-                result = task_func()
-                self.root.after(0, _on_done, result)
+                res = task_func()
+                result_container.append(res)
             except Exception as e:
-                self.root.after(0, _on_fail, e)
+                error_container.append(e)
+            finally:
+                task_done[0] = True
 
-        def _on_done(result):
-            self.root.config(cursor="")
-            if on_success:
-                on_success(result)
+        t = threading.Thread(target=worker, daemon=True)
+        t.start()
 
-        def _on_fail(error):
-            self.root.config(cursor="")
-            if on_error:
-                on_error(error)
+        def show_loading_dialog():
+            if not task_done[0] and show_loading:
+                top = tk.Toplevel(self.root)
+                top.title("Đang xử lý")
+                top.geometry("250x80")
+                top.resizable(False, False)
+                top.transient(self.root)
+                top.grab_set()  # Khóa tương tác với cửa sổ chính
+                
+                # Căn giữa cửa sổ con theo cửa sổ chính
+                top.update_idletasks()
+                x = self.root.winfo_rootx() + (self.root.winfo_width() - 250) // 2
+                y = self.root.winfo_rooty() + (self.root.winfo_height() - 80) // 2
+                top.geometry(f"+{x}+{y}")
+
+                ttk.Label(top, text="Hệ thống đang xử lý, vui lòng chờ...", font=("TkDefaultFont", 10)).pack(pady=(15, 5))
+                pb = ttk.Progressbar(top, mode='indeterminate')
+                pb.pack(fill=tk.X, padx=20)
+                pb.start(10)
+                loading_popup[0] = top
+
+        # Lên lịch kiểm tra sau 300ms, nếu chưa xong thì hiện popup
+        self.root.after(300, show_loading_dialog)
+
+        def check_done():
+            if t.is_alive():
+                self.root.after(50, check_done)
             else:
-                messagebox.showerror("Lỗi", str(error))
+                if loading_popup[0]:
+                    loading_popup[0].grab_release()
+                    loading_popup[0].destroy()
+                
+                if error_container:
+                    if on_error:
+                        on_error(error_container[0])
+                    else:
+                        messagebox.showerror("Lỗi", str(error_container[0]))
+                else:
+                    if on_success:
+                        on_success(result_container[0])
 
-        thread = threading.Thread(target=_worker, daemon=True)
-        thread.start()
+        self.root.after(50, check_done)
 
     # ------------------------------------------------------------------
     # Kết nối callback: View gọi phương thức nào của Controller?
@@ -106,7 +131,7 @@ class PatientController:
     def show_about(self):
         about_text = (
             "Hệ Thống Quản Lý Hồ Sơ Bệnh Nhân\n"
-            "Phiên bản: alpha 0.2\n"
+            "Phiên bản: v0.4-alpha\n"
             "Kiến trúc: MVC (Model-View-Controller)\n\n"
             "Phần mềm hỗ trợ bác sĩ lưu trữ, tìm kiếm và thống kê bệnh án nhanh chóng."
         )
@@ -185,10 +210,14 @@ class PatientController:
     def load_patients(self, query: str = ""):
         """Tải danh sách bệnh nhân (async để không đóng băng giao diện)."""
         def task():
-            return self.model.search_patients(query)
+            rows = self.model.search_patients(query)
+            stats = self.model.get_patient_summary_stats()
+            return rows, stats
 
-        def on_success(rows):
+        def on_success(result):
+            rows, stats = result
             self.manage_view.refresh_list(rows)
+            self.manage_view.update_summary_stats(stats)
 
         self._run_async(task, on_success,
                         lambda e: messagebox.showerror("Lỗi",
@@ -294,7 +323,7 @@ class PatientController:
                 writer = csv.writer(f)
                 writer.writerow(["Họ tên", "Tuổi", "Giới tính", "Số điện thoại",
                                   "Thời gian nhận", "Bệnh chính", "Lịch sử khám",
-                                  "Chiều cao (cm)", "Cân nặng (kg)"])
+                                  "Chiều cao (cm)", "Cân nặng (kg)", "Lịch tái khám (Ngày|Lý do|Định kỳ)"])
                 writer.writerows(rows)
             return file_path
 
@@ -314,10 +343,11 @@ class PatientController:
             return
 
         def task():
+            batch = []
+            count = 0
             with open(file_path, mode='r', encoding='utf-8-sig') as f:
                 reader = csv.reader(f)
                 header = next(reader, None)  # Bỏ qua dòng tiêu đề
-                count = 0
                 for row in reader:
                     if len(row) < 6:
                         continue
@@ -341,11 +371,15 @@ class PatientController:
                     except ValueError:
                         pass
 
+                    fu_str = row[9].strip() if len(row) > 9 else ""
+
                     if name and age:
                         data = (name, age, gender, phone, receive_time,
                                 primary_disease, history, height, weight)
-                        self.model.add_patient(data)
+                        batch.append((data, fu_str))
                         count += 1
+            if batch:
+                self.model.add_patients_batch(batch)
             return count
 
         def on_success(count):
@@ -382,12 +416,14 @@ class PatientController:
         def task():
             rows = self.model.get_follow_ups(search)
             stats = self.model.get_follow_up_stats()
-            return rows, stats
+            patient_stats = self.model.get_patient_summary_stats()
+            return rows, stats, patient_stats
 
         def on_success(result):
-            rows, stats = result
+            rows, stats, patient_stats = result
             self.follow_up_view.refresh_list(rows)
             self.follow_up_view.update_summary(stats)
+            self.follow_up_view.update_summary_stats(patient_stats)
 
         self._run_async(task, on_success,
                         lambda e: messagebox.showerror("Lỗi",

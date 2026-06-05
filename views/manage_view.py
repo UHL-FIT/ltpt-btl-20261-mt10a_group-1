@@ -28,7 +28,6 @@ class ManageView(ttk.Frame):
         self.on_export_csv   = None
         self.on_import_csv   = None
         self.on_double_click = None
-        self.on_add_follow_up = None   # ← mới: chuyển sang tab lịch tái khám
         self.current_editing_id: int | None = None
         
         self._build()
@@ -46,14 +45,35 @@ class ManageView(ttk.Frame):
         self._build_form(self.left_frame)
         self._build_list(right)
 
+    def _validate_name(self, P):
+        """Chỉ cho phép nhập chữ cái và khoảng trắng."""
+        if P == "": return True
+        return all(c.isalpha() or c.isspace() for c in P)
+
+    def _validate_age(self, P):
+        """Chỉ cho phép nhập số nguyên."""
+        if P == "": return True
+        return P.isdigit()
+
+    def _validate_float(self, P):
+        """Chỉ cho phép nhập số thực (có tối đa 1 dấu chấm)."""
+        if P == "": return True
+        if P.count('.') > 1: return False
+        return all(c.isdigit() or c == '.' for c in P)
+
     def _build_form(self, parent):
         labels = [
             "Họ và tên:", "Tuổi:", "Giới tính:", "Số điện thoại:",
             "Thời gian nhận:", "Bệnh chính:",
         ]
+        
+        # Đăng ký hàm kiểm tra (validation commands)
+        vcmd_name = (self.register(self._validate_name), '%P')
+        vcmd_age  = (self.register(self._validate_age), '%P')
+        vcmd_float = (self.register(self._validate_float), '%P')
  
-        self.entry_name      = ttk.Entry(parent, width=30)
-        self.entry_age       = ttk.Entry(parent, width=30)
+        self.entry_name      = ttk.Entry(parent, width=30, validate="key", validatecommand=vcmd_name)
+        self.entry_age       = ttk.Entry(parent, width=30, validate="key", validatecommand=vcmd_age)
         self.combo_gender    = ttk.Combobox(parent,
                                             values=["Nam", "Nữ", "Khác"],
                                             width=27, state="readonly")
@@ -79,10 +99,10 @@ class ManageView(ttk.Frame):
         ttk.Label(parent, text="Chiều cao (cm):").grid(row=row_hw, column=0, sticky=tk.W, pady=5)
         hw_frame = ttk.Frame(parent)
         hw_frame.grid(row=row_hw, column=1, sticky=tk.W, pady=5, padx=(5, 0))
-        self.entry_height = ttk.Entry(hw_frame, width=8)
+        self.entry_height = ttk.Entry(hw_frame, width=8, validate="key", validatecommand=vcmd_float)
         self.entry_height.pack(side=tk.LEFT)
         ttk.Label(hw_frame, text="  Cân nặng (kg):").pack(side=tk.LEFT)
-        self.entry_weight = ttk.Entry(hw_frame, width=8)
+        self.entry_weight = ttk.Entry(hw_frame, width=8, validate="key", validatecommand=vcmd_float)
         self.entry_weight.pack(side=tk.LEFT)
 
         # Lịch sử khám
@@ -111,15 +131,23 @@ class ManageView(ttk.Frame):
         ttk.Button(search_frame, text="Xóa bộ lọc",   command=self._fire_clear_search).pack(side=tk.LEFT, padx=5)
         ttk.Button(search_frame, text="Nhập từ CSV",   command=lambda: self.on_import_csv and self.on_import_csv()).pack(side=tk.LEFT, padx=5)
         ttk.Button(search_frame, text="Xuất ra CSV",   command=lambda: self.on_export_csv and self.on_export_csv()).pack(side=tk.LEFT, padx=5)
+        ttk.Label(search_frame, text="(* Nhập/Xuất CSV bao gồm cả Bệnh nhân & Lịch tái khám)", foreground="#0078d4", font=("TkDefaultFont", 8, "italic")).pack(side=tk.LEFT, padx=5)
         ttk.Label(search_frame, text="(Nháy đúp để xem chi tiết)", foreground="gray").pack(side=tk.RIGHT)
 
-        # Nút xóa phía dưới
+        # Nút hành động và thanh thông tin tổng hợp (dưới cùng)
         action_frame = ttk.Frame(parent)
         action_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
+
+        self._lbl_stats = ttk.Label(
+            action_frame,
+            text="Số lượng bệnh nhân: 0 (Nam: 0, Nữ: 0)  |  Trung bình tuổi: —  |  Tỉ lệ tái khám: —",
+            font=("TkDefaultFont", 9),
+            anchor=tk.W
+        )
+        self._lbl_stats.pack(side=tk.LEFT, padx=5)
+
         ttk.Button(action_frame, text="Sửa Hồ Sơ Đã Chọn", command=self._on_edit_click).pack(side=tk.RIGHT, padx=5)
         ttk.Button(action_frame, text="Xóa Hồ Sơ Đã Chọn", command=self._fire_delete).pack(side=tk.RIGHT)
-        ttk.Button(action_frame, text="📅 Thêm Lịch Tái Khám",
-                   command=self._fire_add_follow_up).pack(side=tk.LEFT, padx=5)
 
         # Bảng dữ liệu
         tree_frame = ttk.Frame(parent)
@@ -178,15 +206,6 @@ class ManageView(ttk.Frame):
         if self.on_edit:
             self.on_edit()
 
-    def _fire_add_follow_up(self):
-        pid = self.get_selected_patient_id()
-        if pid is None:
-            from tkinter import messagebox
-            messagebox.showwarning("Chưa chọn bệnh nhân", "Vui lòng chọn một bệnh nhân trước!")
-            return
-        if self.on_add_follow_up:
-            self.on_add_follow_up(pid)
-
     def refresh_list(self, rows: list[tuple]):
         """Cập nhật danh sách bệnh nhân trên bảng (Treeview) – tối ưu batch."""
         children = self.tree.get_children()
@@ -197,6 +216,21 @@ class ManageView(ttk.Frame):
             patient_id = row[0]
             display_values = (patient_id,) + row[1:]
             self.tree.insert("", tk.END, iid=patient_id, values=display_values)
+
+    def update_summary_stats(self, stats: dict):
+        """Cập nhật thanh thông tin tổng hợp bên dưới danh sách."""
+        total = stats.get('total', 0)
+        male  = stats.get('male', 0)
+        female = stats.get('female', 0)
+        avg_age = stats.get('avg_age', 0)
+        followup_rate = stats.get('followup_rate', 0)
+
+        text = (
+            f"Sĩ số: {total} (Nam: {male}, Nữ: {female})  |  "
+            f"Trung bình tuổi: {avg_age}  |  "
+            f"Tỉ lệ tái khám: {followup_rate}%"
+        )
+        self._lbl_stats.config(text=text)
 
     def fill_form_for_edit(self, patient_id: int, patient_data: tuple):
         """
@@ -304,4 +338,4 @@ class ManageView(ttk.Frame):
             insertbackground=colors['insert_color'],
             selectbackground=colors['select_bg'],
             selectforeground=colors['select_fg'],
-        )        
+        )
