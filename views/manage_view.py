@@ -92,7 +92,7 @@ class ManageView(ttk.Frame):
             w.grid(row=i, column=1, pady=5, padx=(5, 0))
  
         # Giá trị mặc định cho thời gian
-        self.entry_time.insert(0, datetime.now().strftime("%Y-%m-%d %H:%M"))
+        self.entry_time.insert(0, datetime.now().strftime("%d-%m-%Y %H:%M"))
 
         # Chiều cao + Cân nặng trên cùng một hàng
         row_hw = len(labels)
@@ -214,7 +214,17 @@ class ManageView(ttk.Frame):
 
         for row in rows:
             patient_id = row[0]
-            display_values = (patient_id,) + row[1:]
+            # Convert receive_time from YYYY-MM-DD HH:MM to DD-MM-YYYY HH:MM
+            receive_time_db = row[4]
+            receive_time_display = receive_time_db
+            if receive_time_db:
+                try:
+                    dt = datetime.strptime(receive_time_db, "%Y-%m-%d %H:%M")
+                    receive_time_display = dt.strftime("%d-%m-%Y %H:%M")
+                except ValueError:
+                    pass
+            
+            display_values = (patient_id, row[1], row[2], row[3], receive_time_display) + row[5:]
             self.tree.insert("", tk.END, iid=patient_id, values=display_values)
 
     def update_summary_stats(self, stats: dict):
@@ -246,7 +256,16 @@ class ManageView(ttk.Frame):
         self.combo_gender.set(       patient_data[3] or "Nam")
         self.entry_phone.insert(0,   patient_data[4] or "")
         self.entry_time.delete(0, tk.END)
-        self.entry_time.insert(0,    patient_data[5] or "")
+        
+        receive_time_db = patient_data[5] or ""
+        receive_time_display = receive_time_db
+        if receive_time_db:
+            try:
+                dt = datetime.strptime(receive_time_db, "%Y-%m-%d %H:%M")
+                receive_time_display = dt.strftime("%d-%m-%Y %H:%M")
+            except ValueError:
+                pass
+        self.entry_time.insert(0,    receive_time_display)
         self.entry_primary.insert(0, patient_data[6] or "")
         self.text_history.insert("1.0", patient_data[7] or "")
         self.entry_height.insert(0,  str(patient_data[8]) if patient_data[8] else "")
@@ -265,7 +284,7 @@ class ManageView(ttk.Frame):
         self.combo_gender.current(0)
         self.entry_time.delete(0, tk.END)
         from datetime import datetime
-        self.entry_time.insert(0, datetime.now().strftime("%Y-%m-%d %H:%M"))
+        self.entry_time.insert(0, datetime.now().strftime("%d-%m-%Y %H:%M"))
         self.text_history.delete("1.0", tk.END)
 
     # ------------------------------------------------------------------
@@ -308,10 +327,19 @@ class ManageView(ttk.Frame):
 
         ttk.Label(frame, text=f"Hồ sơ: {patient[1]}", font=("Arial", 14, "bold")).pack(anchor=tk.W, pady=(0, 15))
 
+        receive_time_db = patient[5] or ""
+        receive_time_display = receive_time_db
+        if receive_time_db:
+            try:
+                dt = datetime.strptime(receive_time_db, "%Y-%m-%d %H:%M")
+                receive_time_display = dt.strftime("%d-%m-%Y %H:%M")
+            except ValueError:
+                pass
+
         info = (
             f"Tuổi: {patient[2]}  |  Giới tính: {patient[3]}\n"
             f"Số điện thoại: {patient[4]}\n"
-            f"Thời gian nhận: {patient[5]}\n\n"
+            f"Thời gian nhận: {receive_time_display}\n\n"
             f"Bệnh chính: {patient[6]}\n"
             f"Chiều cao: {patient[8] or '—'} cm  |  Cân nặng: {patient[9] or '—'} kg"
         )

@@ -262,13 +262,23 @@ class PatientController:
             messagebox.showwarning("Cân nặng không hợp lệ", "Cân nặng phải là số dương (kg), ví dụ: 65")
             return
 
+        # Validate và convert Thời gian nhận (từ DD-MM-YYYY HH:MM sang YYYY-MM-DD HH:MM)
+        receive_time_db = ""
+        if data["receive_time"]:
+            try:
+                dt = datetime.strptime(data["receive_time"], "%d-%m-%Y %H:%M")
+                receive_time_db = dt.strftime("%Y-%m-%d %H:%M")
+            except ValueError:
+                messagebox.showwarning("Thời gian không hợp lệ", "Thời gian nhận phải đúng định dạng DD-MM-YYYY HH:MM\nVí dụ: 31-12-2025 15:30")
+                return
+
         try:
             editing_id = self.manage_view.current_editing_id
 
             if editing_id:
                 update_tuple = (
                     data["name"], data["age"], data["gender"], data["phone"],
-                    data["receive_time"], data["primary_disease"],
+                    receive_time_db, data["primary_disease"],
                     data["history"], height, weight, editing_id
                 )
                 self.model.update_patient(editing_id, update_tuple)
@@ -276,7 +286,7 @@ class PatientController:
             else:
                 insert_tuple = (
                     data["name"], data["age"], data["gender"], data["phone"],
-                    data["receive_time"], data["primary_disease"],
+                    receive_time_db, data["primary_disease"],
                     data["history"], height, weight
                 )
                 self.model.add_patient(insert_tuple)
@@ -356,6 +366,22 @@ class PatientController:
                     gender          = row[2].strip()
                     phone           = row[3].strip() if len(row) > 3 else ""
                     receive_time    = row[4].strip() if len(row) > 4 else ""
+                    
+                    # Chuẩn hóa receive_time về định dạng YYYY-MM-DD HH:MM
+                    receive_time_db = ""
+                    if receive_time:
+                        try:
+                            # Thử định dạng hiển thị mới: DD-MM-YYYY HH:MM
+                            dt = datetime.strptime(receive_time, "%d-%m-%Y %H:%M")
+                            receive_time_db = dt.strftime("%Y-%m-%d %H:%M")
+                        except ValueError:
+                            try:
+                                # Thử định dạng chuẩn CSDL cũ: YYYY-MM-DD HH:MM
+                                dt = datetime.strptime(receive_time, "%Y-%m-%d %H:%M")
+                                receive_time_db = dt.strftime("%Y-%m-%d %H:%M")
+                            except ValueError:
+                                receive_time_db = receive_time # Giữ nguyên nếu không đúng định dạng nào
+
                     primary_disease = row[5].strip() if len(row) > 5 else ""
                     history         = row[6].strip() if len(row) > 6 else ""
                     height = None
@@ -374,7 +400,7 @@ class PatientController:
                     fu_str = row[9].strip() if len(row) > 9 else ""
 
                     if name and age:
-                        data = (name, age, gender, phone, receive_time,
+                        data = (name, age, gender, phone, receive_time_db,
                                 primary_disease, history, height, weight)
                         batch.append((data, fu_str))
                         count += 1
