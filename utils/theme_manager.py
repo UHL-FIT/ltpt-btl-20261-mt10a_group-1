@@ -23,8 +23,8 @@ THEMES: dict[str, dict] = {
         'entry_fg':         '#1a1a1a',
         'button_bg':        '#e1e1e1',
         'button_fg':        '#1a1a1a',
-        'button_active_bg': '#cce4f7',
-        'select_bg':        '#0078d4',
+        'button_active_bg': '#a29bfe', # Modified from #cce4f7 (modern pastel purple)
+        'select_bg':        '#6c5ce7', # Modified from #0078d4 (premium purple)
         'select_fg':        '#ffffff',
         'tree_bg':          '#ffffff',
         'tree_fg':          '#1a1a1a',
@@ -47,8 +47,8 @@ THEMES: dict[str, dict] = {
         'entry_fg':         '#d4d4d4',
         'button_bg':        '#4c5052',
         'button_fg':        '#d4d4d4',
-        'button_active_bg': '#2d6a9f',
-        'select_bg':        '#2374b5',
+        'button_active_bg': '#341f97', # Modified from #2d6a9f
+        'select_bg':        '#5f27cd', # Modified from #2374b5 (sleek deep purple)
         'select_fg':        '#ffffff',
         'tree_bg':          '#313335',
         'tree_fg':          '#d4d4d4',
