@@ -104,6 +104,8 @@ def main():
     help_menu = tk.Menu(menubar, tearoff=0)
     help_menu.add_command(label="ℹ️ Giới thiệu phần mềm",
                           command=controller.show_about)
+    help_menu.add_command(label="📖 Hướng dẫn sử dụng",
+                          command=controller.open_hdsd)
     menubar.add_cascade(label="Trợ Giúp", menu=help_menu)
 
     root.config(menu=menubar)

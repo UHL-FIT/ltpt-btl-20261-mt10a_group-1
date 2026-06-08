@@ -137,6 +137,28 @@ class PatientController:
         )
         messagebox.showinfo("Giới thiệu phần mềm", about_text)
 
+    def open_hdsd(self):
+        """Mở file HDSD.docx bằng ứng dụng mặc định của hệ thống."""
+        import platform
+        import subprocess
+
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(current_dir)
+        hdsd_path = os.path.join(project_root, "HDSD.docx")
+
+        if os.path.exists(hdsd_path):
+            try:
+                if platform.system() == "Windows":
+                    os.startfile(hdsd_path)
+                elif platform.system() == "Darwin":  # macOS
+                    subprocess.call(["open", hdsd_path])
+                else:  # Linux/Unix
+                    subprocess.call(["xdg-open", hdsd_path])
+            except Exception as e:
+                messagebox.showerror("Lỗi", f"Không thể mở file HDSD.docx: {e}")
+        else:
+            messagebox.showerror("Lỗi", f"Không tìm thấy file HDSD.docx tại đường dẫn:\n{hdsd_path}")
+
     # ------------------------------------------------------------------
     # Xử lý nghiệp vụ – Quản lý bệnh nhân
     # ------------------------------------------------------------------
